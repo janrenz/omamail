@@ -83,6 +83,156 @@ pub fn list_body(start: &str, end: &str) -> Result<String, &'static str> {
     ))
 }
 
+/// What a calendar view leaves out, read for one item when its detail opens:
+/// `FindItem` refuses the body and the attendee lists, `GetItem` answers them.
+const DETAIL_FIELDS: &[&str] = &[
+    "item:Body",
+    "calendar:Organizer",
+    "calendar:RequiredAttendees",
+    "calendar:OptionalAttendees",
+    "calendar:MyResponseType",
+];
+
+/// An item id as Exchange writes one: base64, a few hundred characters. The
+/// id goes into the request as an attribute, so nothing else is let through.
+fn item_id(value: &str) -> Result<&str, &'static str> {
+    if value.is_empty()
+        || value.len() > 1024
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'-' | b'_'))
+    {
+        return Err("calendar_invalid_input");
+    }
+    Ok(value)
+}
+
+/// The SOAP envelope for one item's detail, its body as plain text.
+pub fn detail_body(id: &str) -> Result<String, &'static str> {
+    let id = item_id(id)?;
+    let fields: String = DETAIL_FIELDS
+        .iter()
+        .map(|field| format!(r#"<t:FieldURI FieldURI="{field}"/>"#))
+        .collect();
+    Ok(format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="utf-8"?>"#,
+            r#"<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" "#,
+            r#"xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" "#,
+            r#"xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">"#,
+            r#"<soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>"#,
+            r#"<soap:Body><m:GetItem><m:ItemShape>"#,
+            r#"<t:BaseShape>IdOnly</t:BaseShape><t:BodyType>Text</t:BodyType>"#,
+            r#"<t:AdditionalProperties>{fields}</t:AdditionalProperties></m:ItemShape>"#,
+            r#"<m:ItemIds><t:ItemId Id="{id}"/></m:ItemIds>"#,
+            r#"</m:GetItem></soap:Body></soap:Envelope>"#
+        ),
+        fields = fields,
+        id = id
+    ))
+}
+
+/// The detail answer in Graph's event shape: `body.content`, `organizer`,
+/// `attendees` with their type and response, and `responseStatus`. Text is
+/// kept to a ceiling, and control characters other than line breaks go.
+pub fn detail_shape(xml: &str) -> Result<Value, &'static str> {
+    let mut reader = Reader::from_str(xml);
+    let mut path: Vec<Vec<u8>> = Vec::new();
+    let mut text = String::new();
+    let mut body = String::new();
+    let mut organizer = (String::new(), String::new());
+    let mut attendees: Vec<Value> = Vec::new();
+    let mut person = (String::new(), String::new(), String::new());
+    let mut mine = String::new();
+    let mut unused = false;
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(tag)) => {
+                let name = open(&tag, &mut None, &mut unused, 0)?;
+                if name.as_slice() == b"Attendee" {
+                    person = (String::new(), String::new(), String::new());
+                }
+                path.push(name);
+                text.clear();
+            }
+            Ok(Event::Empty(tag)) => {
+                open(&tag, &mut None, &mut unused, 0)?;
+            }
+            Ok(Event::Text(event)) => {
+                text.push_str(&event.decode().map_err(|_| "calendar_invalid_response")?);
+            }
+            Ok(Event::CData(event)) => {
+                text.push_str(&event.decode().map_err(|_| "calendar_invalid_response")?);
+            }
+            Ok(Event::GeneralRef(event)) => {
+                super::discovery::append_reference(&mut text, &event)?;
+            }
+            Ok(Event::End(_)) => {
+                let name = path.pop().unwrap_or_default();
+                let within = |tag: &[u8]| path.iter().any(|p| p.as_slice() == tag);
+                let short: String = text
+                    .trim()
+                    .chars()
+                    .filter(|c: &char| !c.is_control())
+                    .take(320)
+                    .collect();
+                match name.as_slice() {
+                    // The envelope's own Body closes last and holds nothing.
+                    b"Body" if within(b"CalendarItem") => {
+                        body = text
+                            .trim()
+                            .chars()
+                            .filter(|c: &char| !c.is_control() || *c == '\n')
+                            .take(20000)
+                            .collect();
+                    }
+                    b"MyResponseType" => mine = short,
+                    b"Name" if within(b"Organizer") => organizer.0 = short,
+                    b"EmailAddress" if within(b"Organizer") => organizer.1 = short,
+                    b"Name" if within(b"Attendee") => person.0 = short,
+                    b"EmailAddress" if within(b"Attendee") => person.1 = short,
+                    b"ResponseType" if within(b"Attendee") => person.2 = short,
+                    b"Attendee" if attendees.len() < 500 => {
+                        let kind = if within(b"OptionalAttendees") {
+                            "optional"
+                        } else {
+                            "required"
+                        };
+                        attendees.push(json!({
+                            "type": kind,
+                            "emailAddress": {"name": person.0, "address": person.1},
+                            "status": {"response": response(&person.2)},
+                        }));
+                    }
+                    _ => {}
+                }
+                text.clear();
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => return Err("calendar_invalid_response"),
+            _ => {}
+        }
+    }
+    Ok(json!({
+        "body": {"contentType": "text", "content": body},
+        "organizer": {"emailAddress": {"name": organizer.0, "address": organizer.1}},
+        "attendees": attendees,
+        "responseStatus": {"response": response(&mine)},
+    }))
+}
+
+/// Exchange's response words as Graph's.
+fn response(value: &str) -> &'static str {
+    match value {
+        "Accept" => "accepted",
+        "Tentative" => "tentativelyAccepted",
+        "Decline" => "declined",
+        "Organizer" => "organizer",
+        "NoResponseReceived" => "notResponded",
+        _ => "none",
+    }
+}
+
 /// The mailbox an EWS request is routed to, from the account id
 /// (`outlook:<address>`). Exchange Online wants it named on every request.
 pub fn anchor(account_id: &str) -> Result<&str, &'static str> {
@@ -292,14 +442,18 @@ mod tests {
         assert_eq!(event["subject"], "Budget & plan");
         assert_eq!(event["start"]["dateTime"], "2026-09-28T08:00:00Z");
         assert_eq!(event["location"]["displayName"], "Room 2");
-        assert_eq!(event["organizer"]["emailAddress"]["address"], "dana@example.org");
+        assert_eq!(
+            event["organizer"]["emailAddress"]["address"],
+            "dana@example.org"
+        );
         assert_eq!(event["iCalUId"], "uid-1");
         assert_eq!(shaped["truncated"], false);
     }
 
     #[test]
     fn an_error_inside_a_success_status_is_a_refusal() {
-        let error = answer("", true).replace(r#"ResponseClass="Success""#, r#"ResponseClass="Error""#);
+        let error =
+            answer("", true).replace(r#"ResponseClass="Success""#, r#"ResponseClass="Error""#);
         assert_eq!(graph_shape(&error), Err("calendar_request_failed"));
         let fault = r#"<s:Envelope xmlns:s="s"><s:Body><s:Fault><faultcode>x</faultcode></s:Fault></s:Body></s:Envelope>"#;
         assert_eq!(graph_shape(fault), Err("calendar_request_failed"));
@@ -311,7 +465,10 @@ mod tests {
         let shaped = graph_shape(&answer(&many, true)).unwrap();
         assert_eq!(shaped["value"].as_array().unwrap().len(), MAX_ITEMS);
         assert_eq!(shaped["truncated"], true);
-        assert_eq!(graph_shape(&answer(ITEM, false)).unwrap()["truncated"], true);
+        assert_eq!(
+            graph_shape(&answer(ITEM, false)).unwrap()["truncated"],
+            true
+        );
     }
 
     #[test]
@@ -320,8 +477,55 @@ mod tests {
         let shaped = graph_shape(&answer(&item, true));
         // A NUL reference is not XML at all; a newline is dropped from the text.
         if let Ok(shaped) = shaped {
-            assert!(!shaped["value"][0]["subject"].as_str().unwrap().contains(['\n', '\0']));
+            assert!(
+                !shaped["value"][0]["subject"]
+                    .as_str()
+                    .unwrap()
+                    .contains(['\n', '\0'])
+            );
         }
+    }
+
+    #[test]
+    fn a_detail_asks_for_one_valid_item_and_nothing_else() {
+        let body = detail_body("AAMkAD+/=_-").unwrap();
+        assert!(body.contains(r#"<t:ItemId Id="AAMkAD+/=_-"/>"#));
+        assert!(body.contains("calendar:RequiredAttendees"));
+        assert_eq!(
+            detail_body(r#"x"/><t:ItemId Id="y"#),
+            Err("calendar_invalid_input")
+        );
+        assert_eq!(detail_body(""), Err("calendar_invalid_input"));
+    }
+
+    #[test]
+    fn a_detail_comes_back_with_its_people_and_its_body() {
+        let xml = concat!(
+            r#"<s:Envelope xmlns:s="s"><s:Body><m:GetItemResponse xmlns:m="m" xmlns:t="t"><m:ResponseMessages>"#,
+            r#"<m:GetItemResponseMessage ResponseClass="Success"><m:Items><t:CalendarItem>"#,
+            r#"<t:ItemId Id="AAMk="/><t:Body BodyType="Text">Agenda&#10;1. Budget &amp; plan</t:Body>"#,
+            r#"<t:Organizer><t:Mailbox><t:Name>Dana</t:Name><t:EmailAddress>dana@example.org</t:EmailAddress></t:Mailbox></t:Organizer>"#,
+            r#"<t:RequiredAttendees><t:Attendee><t:Mailbox><t:Name>Ari</t:Name><t:EmailAddress>ari@example.org</t:EmailAddress></t:Mailbox>"#,
+            r#"<t:ResponseType>Accept</t:ResponseType></t:Attendee></t:RequiredAttendees>"#,
+            r#"<t:OptionalAttendees><t:Attendee><t:Mailbox><t:Name>Bo</t:Name><t:EmailAddress>bo@example.org</t:EmailAddress></t:Mailbox>"#,
+            r#"<t:ResponseType>Decline</t:ResponseType></t:Attendee></t:OptionalAttendees>"#,
+            r#"<t:MyResponseType>Tentative</t:MyResponseType>"#,
+            r#"</t:CalendarItem></m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse></s:Body></s:Envelope>"#
+        );
+        let shaped = detail_shape(xml).unwrap();
+        assert_eq!(shaped["body"]["content"], "Agenda\n1. Budget & plan");
+        assert_eq!(
+            shaped["organizer"]["emailAddress"]["address"],
+            "dana@example.org"
+        );
+        assert_eq!(shaped["attendees"][0]["type"], "required");
+        assert_eq!(shaped["attendees"][0]["status"]["response"], "accepted");
+        assert_eq!(shaped["attendees"][1]["type"], "optional");
+        assert_eq!(shaped["attendees"][1]["emailAddress"]["name"], "Bo");
+        assert_eq!(shaped["attendees"][1]["status"]["response"], "declined");
+        assert_eq!(shaped["responseStatus"]["response"], "tentativelyAccepted");
+        let error = xml.replace(r#"ResponseClass="Success""#, r#"ResponseClass="Error""#);
+        assert_eq!(detail_shape(&error), Err("calendar_request_failed"));
     }
 
     #[test]
@@ -332,16 +536,32 @@ mod tests {
     #[test]
     fn a_view_boundary_carries_nothing_but_an_instant() {
         assert!(list_body("2026-09-28T00:00:00Z", "2026-10-05T00:00:00Z").is_ok());
-        for bad in ["", "2026\"/><x", "2026-09-28T00:00:00Z<", "2026 09", "2026-09-28\n", "&amp;"] {
-            assert_eq!(list_body(bad, "2026-10-05T00:00:00Z"), Err("calendar_invalid_input"));
+        for bad in [
+            "",
+            "2026\"/><x",
+            "2026-09-28T00:00:00Z<",
+            "2026 09",
+            "2026-09-28\n",
+            "&amp;",
+        ] {
+            assert_eq!(
+                list_body(bad, "2026-10-05T00:00:00Z"),
+                Err("calendar_invalid_input")
+            );
         }
     }
 
     #[test]
     fn the_anchor_is_the_accounts_own_address() {
         assert_eq!(anchor("outlook:jan@example.org"), Ok("jan@example.org"));
-        for bad in ["jan@example.org", "imap:jan@example.org", "outlook:", "outlook:no-at",
-                    "outlook:a@b\r\nX-Evil: 1", "outlook:a@b c"] {
+        for bad in [
+            "jan@example.org",
+            "imap:jan@example.org",
+            "outlook:",
+            "outlook:no-at",
+            "outlook:a@b\r\nX-Evil: 1",
+            "outlook:a@b c",
+        ] {
             assert_eq!(anchor(bad), Err("calendar_invalid_input"), "{bad:?}");
         }
     }

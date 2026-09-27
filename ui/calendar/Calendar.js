@@ -466,7 +466,56 @@ function graphMoment(value, allDay) {
 
 function graphPerson(value) {
   var address = value && value.emailAddress ? value.emailAddress : {}
-  return { email: String(address.address || ""), displayName: String(address.name || "") }
+  return { email: String(address.address || ""), displayName: String(address.name || ""),
+           response: String(value && value.status && value.status.response || ""),
+           optional: !!value && value.type === "optional" }
+}
+
+// ---------------------------------------------------------------- people
+//
+// Who is invited, from any provider, as an invitation's attendee is read -
+// {name, email, partstat, optional} - so the detail draws one shape. Google
+// says `responseStatus`, Graph and Exchange `status.response`, CalDAV the
+// ICS PARTSTAT itself.
+var PARTSTAT_OF = { accepted: "ACCEPTED", declined: "DECLINED", tentative: "TENTATIVE",
+  tentativelyaccepted: "TENTATIVE", organizer: "ACCEPTED" }
+
+function person(value) {
+  if (!value || typeof value !== "object") return null
+  var email = String(value.email || "").trim()
+  var name = String(value.name || value.displayName || "").trim()
+  if (email === "" && name === "") return null
+  var partstat = String(value.partstat || "").toUpperCase()
+  if (partstat === "") {
+    var said = String(value.response || value.responseStatus || "").toLowerCase()
+    partstat = PARTSTAT_OF[said] || "NEEDS-ACTION"
+  }
+  return { name: name !== "" ? name : email, email: email, partstat: partstat,
+           optional: value.optional === true }
+}
+
+function people(list) {
+  var out = []
+  var values = Array.isArray(list) ? list : []
+  for (var i = 0; i < values.length; i++) {
+    var one = person(values[i])
+    if (one) out.push(one)
+  }
+  return out
+}
+
+// What an Exchange item's detail adds to the event its view drew: the body,
+// the people, and this mailbox's own answer. Given in Graph's event shape.
+function detailFromGraph(payload) {
+  var value = payload && typeof payload === "object" ? payload : {}
+  var attendees = Array.isArray(value.attendees) ? value.attendees : []
+  var mine = String(value.responseStatus && value.responseStatus.response || "").toLowerCase()
+  return {
+    description: String(value.body && value.body.content || "").trim(),
+    organizer: value.organizer ? graphPerson(value.organizer) : null,
+    attendees: attendees.map(graphPerson),
+    myPartstat: PARTSTAT_OF[mine] && mine !== "organizer" ? PARTSTAT_OF[mine] : ""
+  }
 }
 
 function eventsFromGraph(payload, sourceId) {
@@ -531,8 +580,12 @@ function eventsFromEws(payload, sourceId) {
   }
   var events = eventsFromGraph({ value: shaped }, sourceId)
   // Graph's id is its write address; an Exchange item id is not one, and the
-  // source is read-only, so nothing may offer to write to it.
-  for (var e = 0; e < events.length; e++) events[e].graphId = ""
+  // source is read-only, so nothing may offer to write to it. The item id is
+  // kept to read the detail by, which the view leaves out.
+  for (var e = 0; e < events.length; e++) {
+    events[e].ewsId = events[e].graphId
+    events[e].graphId = ""
+  }
   return events
 }
 

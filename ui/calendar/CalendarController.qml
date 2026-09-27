@@ -533,6 +533,20 @@ Item {
     return ""
   }
 
+  // What the view left out, for one event's detail: Exchange's list has no
+  // body and no people, so they are read for the item when it is opened.
+  // Everything else already came with the list, and answers null.
+  function loadDetail(event, callback) {
+    var source = event ? findSource(event.sourceId) : null
+    if (!source || source.kind !== "ews" || String(event.ewsId || "") === "") { callback(null, ""); return }
+    nativeRequest(source, "detail", { id: String(event.ewsId) }, function(result, error) {
+      if (error) { callback(null, String(error)); return }
+      var payload = null
+      try { payload = JSON.parse(String(result && result.body || "")) } catch (e) {}
+      callback(payload ? Calendar.detailFromGraph(payload) : null, payload ? "" : "The calendar returned an unreadable response")
+    })
+  }
+
   function colorKeyFor(sourceId) {
     var values = availableSources && Array.isArray(availableSources.sources)
       ? availableSources.sources : []

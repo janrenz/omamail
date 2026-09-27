@@ -97,6 +97,8 @@ fn prepare(params: &Value) -> Result<Request, &'static str> {
         "create" => Method::POST,
         "update" => Method::PATCH,
         "delete" => Method::DELETE,
+        // One item's detail, which only Exchange's view leaves out.
+        "detail" if kind == "ews" => Method::POST,
         _ => return Err("calendar_invalid_operation"),
     };
     let body = params["body"].as_str().unwrap_or("").to_owned();
@@ -188,15 +190,19 @@ fn prepare(params: &Value) -> Result<Request, &'static str> {
         }
         "ews" => {
             // Read-only: see ews.rs. The destination is fixed and the body is
-            // built from the two view boundaries alone.
-            if op != "list" {
+            // built from the two view boundaries, or from one item's id.
+            if op != "list" && op != "detail" {
                 return Err("calendar_invalid_operation");
             }
             request.account_id = text(source, "accountId")?.into();
             ews::anchor(&request.account_id)?;
             request.url = Url::parse(ews::ENDPOINT).unwrap();
             request.method = Method::POST;
-            request.body = ews::list_body(text(params, "start")?, text(params, "end")?)?;
+            request.body = if op == "detail" {
+                ews::detail_body(text(params, "id")?)?
+            } else {
+                ews::list_body(text(params, "start")?, text(params, "end")?)?
+            };
         }
         "caldav" | "icloud" => {
             let base = if kind == "icloud" {
@@ -274,6 +280,7 @@ where
     let paginated = params["operation"] == "list"
         && !matches!(request.kind.as_str(), "caldav" | "icloud" | "ews");
     let ews_list = request.kind == "ews";
+    let ews_detail = ews_list && params["operation"] == "detail";
     let origin = request.url.clone();
     let mut result = execute(
         client()?,
@@ -288,7 +295,12 @@ where
     .await?;
     if ews_list {
         // Handed on as Graph's shape, so the UI draws it with the Graph mapper.
-        let shaped = ews::graph_shape(result["body"].as_str().unwrap_or(""))?;
+        let body = result["body"].as_str().unwrap_or("");
+        let shaped = if ews_detail {
+            ews::detail_shape(body)?
+        } else {
+            ews::graph_shape(body)?
+        };
         result["body"] =
             Value::String(serde_json::to_string(&shaped).map_err(|_| "calendar_invalid_response")?);
         return Ok(result);

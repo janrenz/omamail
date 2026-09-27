@@ -22,6 +22,11 @@ Item {
   required property color dimColor
   required property color dimmerColor
   required property string panelFontFamily
+  property color urgentColor: accentColor
+
+  // The event opened from the agenda, shown in its place until it is closed:
+  // the reader shows an event the way it shows a message.
+  property var openEvent: null
 
   readonly property var controller: service ? service.calendarController : null
   // Whether there is a calendar to show at all. Without one the reader keeps
@@ -95,8 +100,25 @@ Item {
     onTriggered: root.refresh()
   }
 
+  CalendarEventDetail {
+    anchors.fill: parent
+    visible: !!root.openEvent
+    controller: root.controller
+    event: root.openEvent
+    backLabel: "Coming up"
+    editable: false
+    textColor: root.textColor
+    backgroundColor: "transparent"
+    accentColor: root.accentColor
+    urgentColor: root.urgentColor
+    dimColor: root.dimColor
+    panelFontFamily: root.panelFontFamily
+    onClosed: root.openEvent = null
+  }
+
   Flickable {
     id: flick
+    visible: !root.openEvent
     anchors.fill: parent
     anchors.margins: Style.space(24)
     contentWidth: width
@@ -175,6 +197,13 @@ Item {
                                        when.implicitHeight) + Style.space(6)
               readonly property bool now: !modelData.start.allDay && modelData.start.ms <= root.nowMs
                 && modelData.end && modelData.end.ms > root.nowMs
+
+              // Under the Join link, which is declared after it and so wins.
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.openEvent = line.modelData
+              }
 
               Text {
                 id: when

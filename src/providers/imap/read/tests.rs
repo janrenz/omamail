@@ -147,7 +147,8 @@ async fn multi_window_dates_settle_before_paging_and_ignore_unsolicited_flags() 
                 } else {
                     set.split(',')
                         .flat_map(|part| match part.split_once(':') {
-                            Some((a, b)) => (a.parse::<u32>().unwrap()..=b.parse::<u32>().unwrap().min(4100))
+                            Some((a, b)) => (a.parse::<u32>().unwrap()
+                                ..=b.parse::<u32>().unwrap().min(4100))
                                 .collect::<Vec<_>>(),
                             None => vec![part.parse().unwrap()],
                         })
@@ -157,7 +158,10 @@ async fn multi_window_dates_settle_before_paging_and_ignore_unsolicited_flags() 
                 if dated {
                     // Exchange Online refuses a long command line outright
                     // (`BAD Command Error. 10`); a batch is a range, not a list.
-                    assert!(request.len() < 64, "date request is a short range: {request}");
+                    assert!(
+                        request.len() < 64,
+                        "date request is a short range: {request}"
+                    );
                     assert!(ids.len() <= 4096, "date response must be bounded");
                     batches.push(ids.len());
                 }

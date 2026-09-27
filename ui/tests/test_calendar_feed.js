@@ -520,7 +520,6 @@ assert.ok(googleUrl.indexOf("singleEvents=true") > 0)
 assert.ok(googleUrl.indexOf("orderBy=startTime") > 0)
 assert.ok(googleUrl.indexOf("timeMin=2026-08-01T00%3A00%3A00.000Z") > 0)
 
-console.log("test_calendar_feed.js ok")
 
 // -------------------------------------------------------------- Microsoft
 {
@@ -611,6 +610,7 @@ console.log("test_calendar_feed.js ok")
   assert.strictEqual(standup.location, "Room 2")
   assert.strictEqual(standup.organizer.email, "dana@example.org")
   assert.strictEqual(standup.graphId, "", "an Exchange item id is not a Graph write address")
+  assert.strictEqual(standup.ewsId, "AAMk1", "kept to read the detail by")
   const holiday = events.filter(function(e) { return e.summary === "Holiday" })[0]
   assert.strictEqual(holiday.start.allDay, true)
   assert.strictEqual(new Date(holiday.start.ms).getDate(), 30, "drawn on its own day, not the evening before")
@@ -639,3 +639,33 @@ console.log("test_calendar_feed.js ok")
   assert.deepStrictEqual(lanes([ev("p", at(9), at(9, 5)), ev("q", at(9, 15), at(9, 20))]),
     [["p", 0, 2, 1], ["q", 1, 2, 1]], "events that overlap as drawn share lanes, not only by the clock")
 }
+
+// Who is invited reads as one shape from every provider.
+{
+  const plain = (value) => JSON.parse(JSON.stringify(value))
+  assert.deepStrictEqual(plain(feed.people([
+    { email: "g@example.org", displayName: "Gil", responseStatus: "accepted", optional: true },
+    { email: "m@example.org", displayName: "", response: "tentativelyAccepted" },
+    { name: "Ics", email: "i@example.org", partstat: "DECLINED", optional: false },
+    { email: "", displayName: "" }
+  ])), [
+    { name: "Gil", email: "g@example.org", partstat: "ACCEPTED", optional: true },
+    { name: "m@example.org", email: "m@example.org", partstat: "TENTATIVE", optional: false },
+    { name: "Ics", email: "i@example.org", partstat: "DECLINED", optional: false }
+  ])
+  const detail = feed.detailFromGraph({
+    body: { content: " Agenda\n1. Budget " },
+    organizer: { emailAddress: { name: "Dana", address: "dana@example.org" } },
+    attendees: [{ type: "optional", emailAddress: { name: "Bo", address: "bo@example.org" }, status: { response: "declined" } }],
+    responseStatus: { response: "tentativelyAccepted" }
+  })
+  assert.strictEqual(detail.description, "Agenda\n1. Budget")
+  assert.strictEqual(detail.organizer.email, "dana@example.org")
+  assert.strictEqual(feed.person(detail.attendees[0]).partstat, "DECLINED")
+  assert.strictEqual(detail.attendees[0].optional, true)
+  assert.strictEqual(detail.myPartstat, "TENTATIVE")
+  assert.strictEqual(feed.detailFromGraph({ responseStatus: { response: "organizer" } }).myPartstat, "",
+    "an organiser is not asked for an answer")
+}
+
+console.log("test_calendar_feed.js ok")

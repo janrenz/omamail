@@ -776,12 +776,29 @@
       "equals": {
         "message": "auth_account_missing"
       }
+    },
+    {
+      "name": "Exchange event detail reads the mailbox's own Exchange token",
+      "method": "calendar.request",
+      "params": {
+        "source": {
+          "kind": "ews",
+          "accountId": "outlook:missing@example.org"
+        },
+        "operation": "detail",
+        "id": "AAMkAGI2"
+      },
+      "errorCode": -32000,
+      "equals": {
+        "message": "auth_account_missing"
+      }
     }
   ],
   "unreleased": {
     "methods": [],
     "cases": [
-      "Exchange calendar request reads the mailbox's own Exchange token"
+      "Exchange calendar request reads the mailbox's own Exchange token",
+      "Exchange event detail reads the mailbox's own Exchange token"
     ]
   }
 }
