@@ -1700,6 +1700,16 @@ Item {
   readonly property var placeCounts: screenerOn ? screenerHost.placeCounts : ({})
   readonly property var places: screenerOn ? Screener.PLACES : []
 
+  // The tabs a narrow window shows in place of the rail: the places first
+  // while the Screener is on, then the mailboxes. A place's key is
+  // "place:<key>", which selectMailbox turns back into selectPlace.
+  readonly property var tabRows: screenerOn
+    ? Screener.PLACES.map(function(p) {
+        return { key: "place:" + p.key, label: p.label, icon: p.icon, optional: !!p.folder }
+      }).concat(mailboxes)
+    : mailboxes
+  readonly property string tabKey: place !== "" ? "place:" + place : mailboxKey
+
   function enableScreener() { if (screenerHost) screenerHost.enable() }
   function disableScreener() { if (screenerHost) screenerHost.disable() }
 
@@ -2095,6 +2105,7 @@ Item {
     return current ? current.cursorOffset(cursorId, delta) : ""
   }
   function selectMailbox(key) {
+    if (String(key).indexOf("place:") === 0) { selectPlace(String(key).substring(6)); return }
     if (screenerHost) screenerHost.place = ""
     if (!unified) {
       if (current) current.selectMailbox(key)
