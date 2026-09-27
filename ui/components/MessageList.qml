@@ -60,6 +60,19 @@ Column {
   // tore every row down and built it again each time: a pointer pressed on
   // a row at that moment was pressed on nothing, and the click was lost.
   // With the count, a row stays while its summary is read again by index.
+  // The calendar beside the mail on a window too narrow for the reader's
+  // week - see AgendaStrip.qml. Off unless the host says it is that narrow.
+  property bool agendaStrip: false
+  AgendaStrip {
+    objectName: "agenda-strip"
+    wanted: root.agendaStrip
+    service: root.service
+    textColor: root.textColor
+    accentColor: root.accentColor
+    dimColor: root.dimColor
+    panelFontFamily: root.panelFontFamily
+  }
+
   Repeater {
     id: rows
     model: root.service.messages.length

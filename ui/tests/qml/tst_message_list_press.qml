@@ -46,6 +46,14 @@ Item {
     name: "MessageListPress"
     when: windowShown
 
+    // The list's rows, without the agenda strip that heads it.
+    function rowsOf(view) {
+      var out = []
+      for (var i = 0; i < view.children.length; i++)
+        if (view.children[i].objectName !== "agenda-strip") out.push(view.children[i])
+      return out
+    }
+
     function row(id, unread) {
       return ({ id: id, threadId: "", from: { email: "x@example.com", display: "X" }, subject: "Message " + id,
         snippet: "", time: "", date: "", unread: unread === true, starred: false, inInbox: true, labelIds: ["INBOX"] })
@@ -62,7 +70,7 @@ Item {
     }
 
     function test_a_press_outlives_the_messages_being_told_again() {
-      var target = list.children[1]
+      var target = rowsOf(list)[1]
       verify(target && target.summary && target.summary.id === "2:INBOX", "the second row is on screen")
       var x = 20, y = target.y + target.height / 2
       mousePress(list, x, y)

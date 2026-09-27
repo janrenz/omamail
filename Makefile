@@ -40,7 +40,7 @@ QML_FILES := ui/Service.qml ui/BarWidget.qml ui/App.qml ui/compose/RecoveryContr
 	ui/components/InviteCard.qml \
 	ui/components/SwitcherSearch.qml \
 	ui/components/AccountNameField.qml \
-	ui/components/ReaderBlankSlate.qml ui/components/AgendaPane.qml \
+	ui/components/ReaderBlankSlate.qml ui/components/AgendaPane.qml ui/components/AgendaStrip.qml \
 	ui/components/ReaderSkeleton.qml \
 	ui/components/ComposeView.qml \
 	ui/components/RecipientSuggestions.qml \

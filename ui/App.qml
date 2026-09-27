@@ -1980,6 +1980,7 @@ Item {
 
             MessageList {
               id: list
+              agendaStrip: root.compact
               scroller: listFlick
               // Match the sidebar's first row inset below the header.
               y: Style.space(6)
