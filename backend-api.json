@@ -807,6 +807,19 @@
       }
     },
     {
+      "name": "Screener rules refuse a transport they do not know",
+      "method": "outlook.screenerRules",
+      "params": {
+        "accountId": "outlook:missing@example.org",
+        "operation": "status",
+        "via": "imap"
+      },
+      "errorCode": -32000,
+      "equals": {
+        "message": "invalid_params"
+      }
+    },
+    {
       "name": "Screener rules refuse a place they do not keep",
       "method": "outlook.screenerRules",
       "params": {
@@ -830,7 +843,8 @@
       "Exchange calendar request reads the mailbox's own Exchange token",
       "Exchange event detail reads the mailbox's own Exchange token",
       "Screener rules read the mailbox's own Exchange token",
-      "Screener rules refuse a place they do not keep"
+      "Screener rules refuse a place they do not keep",
+      "Screener rules refuse a transport they do not know"
     ]
   }
 }

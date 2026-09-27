@@ -54,6 +54,10 @@ assert.strictEqual(microsoft.missingGraphScope("https://graph.microsoft.com/User
 assert.strictEqual(microsoft.missingGraphScope("Mail.Send Calendars.ReadWrite openid profile"), false)
 assert.strictEqual(microsoft.missingGraphScope("mail.send"), false)
 assert.strictEqual(microsoft.missingGraphScope(""), false)
+// The Screener's rules need both of theirs, and never ask for more.
+assert.strictEqual(microsoft.missingRulesScope("MailboxSettings.ReadWrite Mail.ReadBasic openid"), false)
+assert.strictEqual(microsoft.missingRulesScope("https://graph.microsoft.com/MailboxSettings.ReadWrite"), true)
+assert.ok(microsoft.RULES_SIGN_IN_SCOPES.every(function(s) { return !/Mail\.(Read|ReadWrite|Send)$/.test(s) }))
 assert.strictEqual(microsoft.missingGraphScope("openid profile User.Read"), true)
 deepEqual(microsoft.missingMailScopes(""), [])
 deepEqual(microsoft.missingMailScopes("IMAP.AccessAsUser.All SMTP.Send"), [])

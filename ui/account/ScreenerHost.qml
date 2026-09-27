@@ -213,18 +213,21 @@ QtObject {
 
   // ----------------------------------------------------------- server rules
 
-  // An Exchange mailbox signed in with Exchange Web Services also sorts on
-  // the server: each place's senders become an inbox rule, so mail reaches
-  // The Feed on the phone and while this app is closed - see
-  // src/providers/outlook_rules.rs. The sweep above keeps running either
-  // way; a rule only gets there first.
+  // An Outlook mailbox also sorts on the server: each place's senders become
+  // an inbox rule, so mail reaches The Feed on the phone and while this app
+  // is closed - see src/providers/outlook_rules.rs. Written through Graph,
+  // or through Exchange Web Services for a mailbox whose tenant refuses Graph
+  // (the one that reads its calendar that way). The sweep above keeps
+  // running either way; a rule only gets there first.
   readonly property bool rulesReachable: available && account.providerId === "outlook"
     && !!account.backend && account.backend.ready && account.backend.apiVersion >= 6
-    && String(account.imapSettings && account.imapSettings.calendar || "").toLowerCase() === "ews"
+  readonly property string rulesVia:
+    String(account.imapSettings && account.imapSettings.calendar || "").toLowerCase() === "ews" ? "ews" : "graph"
   readonly property bool rulesAvailable: on && rulesReachable && rulesRefusal === ""
-  // Why this mailbox's rules are not written, for the rest of the session:
-  // Outlook for Windows' own rules in the way, or Exchange refusing the
-  // token. A network failure is not remembered; the next decision tries again.
+  // Why this mailbox's rules are not written, for the rest of the session or
+  // until the consent they wait for is given: Outlook for Windows' own rules
+  // in the way, Exchange refusing the token, Graph not consented. A network
+  // failure is not remembered; the next decision tries again.
   property string rulesRefusal: ""
   property bool rulesPulled: false
 
@@ -232,6 +235,12 @@ QtObject {
 
   function rulesFailed(error) {
     var code = rulesCode(error)
+    if (code === "auth_consent_required" && rulesVia === "graph" && account.auth) {
+      rulesRefusal = code
+      account.auth.rulesConsentNeeded = true
+      account.note("To sort on the server too, choose Allow the Screener's rules in this mailbox's settings")
+      return
+    }
     var why = ({
       rules_outlook_blob: "Outlook for Windows keeps its own rules in this mailbox, so the Screener sorts only while this app is open",
       rules_auth_refused: "Exchange did not let the Screener write rules, so it sorts only while this app is open",
@@ -241,6 +250,16 @@ QtObject {
     if (!why) return
     rulesRefusal = code
     account.note(why)
+  }
+
+  property Connections consentWatch: Connections {
+    target: host.account.auth
+    ignoreUnknownSignals: true
+    function onRulesConsented() {
+      host.rulesRefusal = ""
+      host.rulesPulled = false
+      host.pullRules()
+    }
   }
 
   // Decisions arrive one key press at a time; they go out together.
@@ -256,7 +275,7 @@ QtObject {
   function pullRules() {
     if (!rulesAvailable || rulesPulled) return
     rulesPulled = true
-    account.backend.call("outlook.screenerRules", { accountId: account.accountId, operation: "status" },
+    account.backend.call("outlook.screenerRules", { accountId: account.accountId, operation: "status", via: rulesVia },
       function(result, error) {
         if (!host) return
         if (error) { host.rulesPulled = false; host.rulesFailed(error); return }
@@ -273,7 +292,8 @@ QtObject {
       if (!host.rulesAvailable) return
       var lists = Screener.ruleLists(host.ledger)
       host.account.backend.call("outlook.screenerRules", {
-        accountId: host.account.accountId, operation: "sync", rules: lists.rules, forget: lists.forget
+        accountId: host.account.accountId, operation: "sync", via: host.rulesVia,
+        rules: lists.rules, forget: lists.forget
       }, function(result, error) { if (host && error) host.rulesFailed(error) })
     })
   }
@@ -284,7 +304,7 @@ QtObject {
     rulesTimer.stop()
     if (!rulesReachable || rulesRefusal !== "") return
     rulesPulled = false
-    account.backend.call("outlook.screenerRules", { accountId: account.accountId, operation: "clear" },
+    account.backend.call("outlook.screenerRules", { accountId: account.accountId, operation: "clear", via: rulesVia },
       function(result, error) {
         if (host && error) host.account.fail("Could not remove the Screener's rules from Exchange")
       })

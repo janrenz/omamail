@@ -15,9 +15,9 @@
 // which sender goes where, what comes back when - are the account's
 // `screener` entry. That entry is per machine, like the rest of accounts.json;
 // a second machine sees the mail already in its places and asks again only
-// about senders it has never been told about. An Exchange mailbox signed in
-// with Exchange Web Services also keeps them as inbox rules, which sort on the
-// server and carry the decisions to every machine - see ruleLists.
+// about senders it has never been told about. An Outlook mailbox also keeps
+// them as inbox rules, which sort on the server and carry the decisions to
+// every machine - see ruleLists.
 //
 // This file is the rules and nothing else: no request, no QML type. The
 // object that runs them against an account is ScreenerHost.qml.

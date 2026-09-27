@@ -10,7 +10,14 @@
 //! and names are this module's constants, and an address is checked and
 //! escaped before it goes in.
 //!
-//! A mailbox that has rules made by Outlook for Windows or Mac carries a
+//! The rules are written through Microsoft Graph (`messageRules`, with
+//! MailboxSettings.ReadWrite) unless the caller asks for Exchange Web Services
+//! with `via: "ews"`, for a tenant that grants the mail client Exchange but
+//! not Graph. Exchange Online stops serving EWS to other clients from October
+//! 2026, so that is a stopgap; the rules, their names and the merge are the
+//! same either way.
+//!
+//! Over EWS, a mailbox that has rules made by Outlook for Windows or Mac carries a
 //! "rule blob" Exchange refuses to write past unless it is told to delete it,
 //! and deleting it can take the desktop client's own rules with it. That is
 //! never done here: such a mailbox answers `rules_outlook_blob`, and the app
@@ -22,6 +29,7 @@ use serde_json::{Value, json};
 use std::{sync::OnceLock, time::Duration};
 
 const ENDPOINT: &str = "https://outlook.office365.com/EWS/Exchange.asmx";
+const GRAPH: &str = "https://graph.microsoft.com/v1.0/me/mailFolders";
 const LIMIT: usize = 4 * 1024 * 1024;
 /// Senders per rule. Exchange keeps every rule of a mailbox in 256 KB; this
 /// many addresses of ordinary length stay well inside it.
@@ -510,9 +518,214 @@ fn addresses(value: &Value) -> Result<Vec<String>, &'static str> {
         .collect()
 }
 
-/// `outlook.screenerRules`:
+/// A rule as Graph writes it: the same conditions and actions as `rule_xml`.
+pub fn graph_rule(place: usize, priority: u32, folder_id: &str, senders: &[String]) -> Value {
+    json!({
+        "displayName": PLACES[place].2,
+        "sequence": priority,
+        "isEnabled": true,
+        "conditions": {
+            "fromAddresses": senders
+                .iter()
+                .map(|a| json!({"emailAddress": {"address": a}}))
+                .collect::<Vec<_>>(),
+        },
+        "actions": {"moveToFolder": folder_id, "stopProcessingRules": true},
+    })
+}
+
+/// The inbox rules of a Graph listing, read the way `read_answer` reads
+/// Exchange's: senders only of the three written here.
+pub fn read_graph_rules(value: &Value) -> Result<Vec<Rule>, &'static str> {
+    let list = value["value"].as_array().ok_or("rules_invalid_response")?;
+    let mut rules = Vec::new();
+    for item in list.iter().take(1000) {
+        let clean = |v: &Value| -> String {
+            v.as_str()
+                .unwrap_or("")
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(1024)
+                .collect()
+        };
+        let mut rule = Rule {
+            id: clean(&item["id"]),
+            name: clean(&item["displayName"]),
+            priority: item["sequence"]
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .unwrap_or(0),
+            senders: Vec::new(),
+        };
+        if rule.id.is_empty() {
+            continue;
+        }
+        if PLACES.iter().any(|p| p.2 == rule.name) {
+            let from = item["conditions"]["fromAddresses"].as_array();
+            for entry in from.into_iter().flatten().take(4 * MAX_SENDERS) {
+                if let Some(address) = entry["emailAddress"]["address"].as_str().and_then(sender)
+                    && !rule.senders.contains(&address)
+                {
+                    rule.senders.push(address);
+                }
+            }
+        }
+        rules.push(rule);
+    }
+    Ok(rules)
+}
+
+fn graph_url(tail: &[&str]) -> Result<reqwest::Url, &'static str> {
+    let mut url = reqwest::Url::parse(GRAPH).map_err(|_| "rules_request_failed")?;
+    // Pushed as segments, so an id with a slash or a plus stays one segment.
+    url.path_segments_mut()
+        .map_err(|_| "rules_request_failed")?
+        .extend(tail);
+    Ok(url)
+}
+
+async fn graph(
+    token: &str,
+    method: reqwest::Method,
+    url: reqwest::Url,
+    body: Option<Value>,
+) -> Result<Value, &'static str> {
+    let mut request = client()?.request(method, url).bearer_auth(token);
+    if let Some(body) = body {
+        request = request
+            .header("Content-Type", "application/json")
+            .body(body.to_string());
+    }
+    let mut response = request.send().await.map_err(|_| "rules_network_failed")?;
+    let status = response.status().as_u16();
+    if status == 401 || status == 403 {
+        return Err("rules_auth_refused");
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| "rules_network_failed")? {
+        if chunk.len() > LIMIT - bytes.len() {
+            return Err("rules_response_too_large");
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let value: Value = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).map_err(|_| "rules_invalid_response")?
+    };
+    if !(200..300).contains(&status) {
+        let code = value["error"]["code"].as_str().unwrap_or("");
+        return Err(if code.contains("Quota") {
+            "rules_over_quota"
+        } else {
+            "rules_request_failed"
+        });
+    }
+    Ok(value)
+}
+
+/// Where the rules are read and written: Graph, or EWS for a tenant that
+/// refuses Graph.
+#[derive(Clone, Copy, PartialEq)]
+enum Via {
+    Graph,
+    Ews,
+}
+
+async fn current(via: Via, token: &str, mailbox: &str) -> Result<Answer, &'static str> {
+    match via {
+        Via::Ews => {
+            let answer = post(token, mailbox, get_rules_body()).await?;
+            refused(&answer)?;
+            Ok(answer)
+        }
+        Via::Graph => {
+            let url = graph_url(&["inbox", "messageRules"])?;
+            let value = graph(token, reqwest::Method::GET, url, None).await?;
+            Ok(Answer {
+                rules: read_graph_rules(&value)?,
+                ..Answer::default()
+            })
+        }
+    }
+}
+
+async fn folder(
+    via: Via,
+    token: &str,
+    mailbox: &str,
+    name: &str,
+) -> Result<Option<String>, &'static str> {
+    match via {
+        Via::Ews => {
+            let found = post(token, mailbox, find_folder_body(name)).await?;
+            refused(&found)?;
+            Ok(found.folders.first().cloned())
+        }
+        Via::Graph => {
+            let mut url = reqwest::Url::parse(GRAPH).map_err(|_| "rules_request_failed")?;
+            // `name` is one of PLACES' folder names: no quote to escape.
+            url.query_pairs_mut()
+                .append_pair("$filter", &format!("displayName eq '{name}'"))
+                .append_pair("$select", "id,displayName");
+            let value = graph(token, reqwest::Method::GET, url, None).await?;
+            Ok(value["value"]
+                .as_array()
+                .and_then(|list| list.first())
+                .and_then(|f| f["id"].as_str())
+                .filter(|id| !id.is_empty() && id.len() <= 1024)
+                .map(str::to_owned))
+        }
+    }
+}
+
+async fn apply(
+    via: Via,
+    token: &str,
+    mailbox: &str,
+    ops: &[Operation],
+) -> Result<(), &'static str> {
+    if via == Via::Ews {
+        let done = post(token, mailbox, update_rules_body(ops)).await?;
+        return refused(&done);
+    }
+    for op in ops {
+        let (method, url, body) = match op {
+            Operation::Create {
+                place,
+                priority,
+                folder_id,
+                senders,
+            } => (
+                reqwest::Method::POST,
+                graph_url(&["inbox", "messageRules"])?,
+                Some(graph_rule(*place, *priority, folder_id, senders)),
+            ),
+            Operation::Set {
+                place,
+                rule_id,
+                priority,
+                folder_id,
+                senders,
+            } => (
+                reqwest::Method::PATCH,
+                graph_url(&["inbox", "messageRules", rule_id])?,
+                Some(graph_rule(*place, *priority, folder_id, senders)),
+            ),
+            Operation::Delete { rule_id } => (
+                reqwest::Method::DELETE,
+                graph_url(&["inbox", "messageRules", rule_id])?,
+                None,
+            ),
+        };
+        graph(token, method, url, body).await?;
+    }
+    Ok(())
+}
+
+/// `outlook.screenerRules`, over Graph unless `via` is `"ews"`:
 /// - `{accountId, operation: "status"}` answers whether a rule blob is in
-///   the way and the senders each of the three rules holds;
+///   the way (EWS only) and the senders each of the three rules holds;
 /// - `{accountId, operation: "sync", rules: {feed, papertrail, screenedout},
 ///   forget: [...]}` merges this machine's decisions into them - see
 ///   `merged` - with `forget` naming senders decided to stay in the inbox;
@@ -520,6 +733,11 @@ fn addresses(value: &Value) -> Result<Vec<String>, &'static str> {
 pub async fn call(params: &Value) -> Result<Value, &'static str> {
     let account = params["accountId"].as_str().ok_or("invalid_params")?;
     let mailbox = mailbox(account)?.to_owned();
+    let via = match params["via"].as_str() {
+        None | Some("graph") => Via::Graph,
+        Some("ews") => Via::Ews,
+        Some(_) => return Err("invalid_params"),
+    };
     let operation = params["operation"].as_str().ok_or("invalid_params")?;
     let wanted = match operation {
         "status" => None,
@@ -530,9 +748,9 @@ pub async fn call(params: &Value) -> Result<Value, &'static str> {
         )),
         _ => return Err("invalid_params"),
     };
-    let token = crate::auth::access_token("outlook", account, "ews").await?;
-    let current = post(&token, &mailbox, get_rules_body()).await?;
-    refused(&current)?;
+    let resource = if via == Via::Ews { "ews" } else { "rules" };
+    let token = crate::auth::access_token("outlook", account, resource).await?;
+    let current = current(via, &token, &mailbox).await?;
     let Some((wanted, forget)) = wanted else {
         let mut places = serde_json::Map::new();
         for (key, _, name) in PLACES {
@@ -559,9 +777,7 @@ pub async fn call(params: &Value) -> Result<Value, &'static str> {
         if senders.is_empty() || unchanged {
             continue;
         }
-        let found = post(&token, &mailbox, find_folder_body(PLACES[*place].1)).await?;
-        refused(&found)?;
-        folder_ids[*place] = found.folders.first().cloned();
+        folder_ids[*place] = folder(via, &token, &mailbox, PLACES[*place].1).await?;
     }
     let ops = plan(&target, &current.rules, &folder_ids)?;
     if ops.is_empty() {
@@ -570,8 +786,7 @@ pub async fn call(params: &Value) -> Result<Value, &'static str> {
     if current.blob {
         return Err("rules_outlook_blob");
     }
-    let done = post(&token, &mailbox, update_rules_body(&ops)).await?;
-    refused(&done)?;
+    apply(via, &token, &mailbox, &ops).await?;
     Ok(json!({"changed": ops.len()}))
 }
 
@@ -733,5 +948,39 @@ mod tests {
         );
         let fault = r#"<s:Envelope xmlns:s="s"><s:Body><s:Fault><faultcode>x</faultcode></s:Fault></s:Body></s:Envelope>"#;
         assert_eq!(read_answer(fault), Err("rules_request_failed"));
+    }
+
+    #[test]
+    fn graph_rules_are_written_and_read_like_exchange_ones() {
+        let body = graph_rule(0, 3, "AAMk=", &list(&["a@x.y", "b@x.y"]));
+        assert_eq!(body["displayName"], "Screener: The Feed (omamail)");
+        assert_eq!(body["sequence"], 3);
+        assert_eq!(body["actions"]["moveToFolder"], "AAMk=");
+        assert_eq!(body["actions"]["stopProcessingRules"], true);
+        assert_eq!(body["conditions"]["fromAddresses"][1]["emailAddress"]["address"], "b@x.y");
+        assert!(body["actions"].get("delete").is_none() && body["actions"].get("forwardTo").is_none());
+
+        let listing = json!({"value": [
+            {"id": "r1", "displayName": "Screener: Paper Trail (omamail)", "sequence": 2,
+             "conditions": {"fromAddresses": [
+                {"emailAddress": {"address": "Bill@X.Y"}},
+                {"emailAddress": {"address": "bill@x.y"}},
+                {"emailAddress": {"address": "not an address"}}]}},
+            {"id": "r2", "displayName": "Someone else's", "sequence": 1,
+             "conditions": {"fromAddresses": [{"emailAddress": {"address": "boss@x.y"}}]}},
+            {"displayName": "no id"}
+        ]});
+        let rules = read_graph_rules(&listing).unwrap();
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0], rule("r1", "Screener: Paper Trail (omamail)", 2, &["bill@x.y"]));
+        assert!(rules[1].senders.is_empty(), "another rule's senders are not read");
+        assert_eq!(read_graph_rules(&json!({"error": {}})), Err("rules_invalid_response"));
+    }
+
+    #[test]
+    fn a_graph_rule_id_stays_one_path_segment() {
+        let url = graph_url(&["inbox", "messageRules", "AQ/+a=="]).unwrap();
+        assert_eq!(url.host_str(), Some("graph.microsoft.com"));
+        assert_eq!(url.path(), "/v1.0/me/mailFolders/inbox/messageRules/AQ%2F+a==");
     }
 }

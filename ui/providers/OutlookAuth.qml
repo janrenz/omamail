@@ -43,6 +43,10 @@ Item {
   // Graph, holds `loginSucceeded` until it is answered.
   property string devicePurpose: "mail"
   property bool graphConsentNeeded: false
+  // The Screener asked Graph for its rules and was refused for want of
+  // consent: the next sign-in from the settings is that consent's code.
+  property bool rulesConsentNeeded: false
+  signal rulesConsented()
   property bool graphRoundOfSignIn: false
   // A Graph sign-in asked for from the setup page, on a mailbox that is
   // signed in and stays so: not `loginBusy`, which would take the mailbox
@@ -339,6 +343,28 @@ Item {
     if (afterSignIn) loginSucceeded()
   }
 
+  // The rules' consent is given: nothing to keep but the refresh token it
+  // came with, which exchanges for the mail resource as the old one did.
+  // The backend asks for the rules' own token when it writes them.
+  function acceptRulesSignIn(result) {
+    var wrongAccount = !Microsoft.sameAccount(result.idToken, configuredEmail, accountKey)
+    if (!wrongAccount && result.refreshToken) storeRefreshToken(result.refreshToken)
+    cancelDeviceLogin()
+    loginBusy = false
+    graphRoundBusy = false
+    if (wrongAccount) {
+      lastError = Microsoft.otherAccountMessage(Microsoft.signedInAs(result.idToken), configuredEmail)
+      return
+    }
+    if (Microsoft.missingRulesScope(result.scope)) {
+      lastError = "Microsoft did not grant MailboxSettings.ReadWrite and Mail.ReadBasic, which the Screener's rules need"
+      return
+    }
+    lastError = ""
+    rulesConsentNeeded = false
+    rulesConsented()
+  }
+
   // The Graph sign-in failing leaves the mail one as it was: the account is
   // not told its session is gone, only what Graph will say when asked.
   function failGraphRound(reason) {
@@ -611,6 +637,13 @@ Item {
     // Signed in for mail and refused Graph for want of consent: the code
     // asked for is Graph's, and the mail session stands. A saved session
     // not restored yet signs in for mail first, whatever Graph said.
+    if (rulesConsentNeeded && loggedIn && !graphConsentNeeded) {
+      lastError = ""
+      graphRoundOfSignIn = false
+      graphRoundBusy = true
+      startDeviceFlow("rules")
+      return
+    }
     var forGraph = graphConsentNeeded && loggedIn
     if (forGraph) {
       // The mailbox stays in service: nothing of the mail session is let
@@ -636,7 +669,8 @@ Item {
     devicePurpose = purpose
     postForm(Microsoft.deviceUrlFor(tenant),
       Microsoft.deviceAuthorizationBody(clientId,
-        purpose === "graph" ? Microsoft.GRAPH_SIGN_IN_SCOPES : scopes),
+        purpose === "graph" ? Microsoft.GRAPH_SIGN_IN_SCOPES
+          : purpose === "rules" ? Microsoft.RULES_SIGN_IN_SCOPES : scopes),
       function(status, text) {
         if (!root.isCurrent(context) || round !== root.graphRoundSerial) return
         var result = Microsoft.parseDeviceResponse(status, text)
@@ -681,6 +715,10 @@ Item {
         }
         if (root.devicePurpose === "graph") {
           root.acceptGraphSignIn(result)
+          return
+        }
+        if (root.devicePurpose === "rules") {
+          root.acceptRulesSignIn(result)
           return
         }
         var missing = Microsoft.missingMailScopes(result.scope)

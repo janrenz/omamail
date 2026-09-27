@@ -369,6 +369,12 @@ pub(super) fn scope(resource: &str) -> Result<&'static str, &'static str> {
         // way the mail scopes are, which is also what the granted-scope
         // check below compares against.
         "ews" => "offline_access https://outlook.office.com/EWS.AccessAsUser.All",
+        // The Screener's inbox rules, and finding the folders they move to.
+        // Its own resource, so a mailbox that never turns the Screener on is
+        // never asked for it and a Graph sign-in without it stays whole.
+        "rules" => {
+            "https://graph.microsoft.com/MailboxSettings.ReadWrite https://graph.microsoft.com/Mail.ReadBasic"
+        }
         _ => return Err("invalid_params"),
     })
 }

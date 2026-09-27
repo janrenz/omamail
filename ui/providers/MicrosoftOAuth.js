@@ -50,6 +50,20 @@ var GRAPH_SCOPES = [
 // else is refused, not filed as the mailbox.
 var GRAPH_SIGN_IN_SCOPES = ["openid", "profile", "email", "offline_access"].concat(GRAPH_SCOPES)
 
+// The Screener's inbox rules: writing them, and finding the folders they
+// move mail to. A Graph consent of its own, given once from the mailbox's
+// settings when the Screener first asks for it - a mailbox without the
+// Screener is never asked. The token itself is the backend's to fetch.
+var RULES_SCOPES = [
+  "https://graph.microsoft.com/MailboxSettings.ReadWrite",
+  "https://graph.microsoft.com/Mail.ReadBasic"
+]
+var RULES_SIGN_IN_SCOPES = ["openid", "profile", "email", "offline_access"].concat(RULES_SCOPES)
+
+function missingRulesScope(granted) {
+  return !scopeListed(granted, RULES_SCOPES[0]) || !scopeListed(granted, RULES_SCOPES[1])
+}
+
 function normalizeTenant(value) {
   var text = trimmed(value).toLowerCase()
   if (text === "" || text === "consumers") return "consumers"

@@ -27,6 +27,7 @@ Column {
   // Signed in for mail, and Microsoft refused Graph for want of consent:
   // the sign-in button stays, as the Graph sign-in.
   readonly property bool graphConsentNeeded: root.signedIn && !!auth && auth.graphConsentNeeded === true
+  readonly property bool rulesConsentNeeded: root.signedIn && !!auth && auth.rulesConsentNeeded === true
   readonly property bool usingBuiltinClient: Microsoft.isValidClientId(Microsoft.BUILTIN_CLIENT_ID)
   readonly property bool toolsMissing: !!auth && auth.toolsChecked && auth.missingTools.length > 0
   property bool connectionBusy: false
@@ -82,7 +83,7 @@ Column {
 
   function signIn() {
     if (root.busy) return
-    if (root.graphConsentNeeded) {
+    if (root.graphConsentNeeded || root.rulesConsentNeeded) {
       // Nothing to save: the mailbox is set up and signed in. The code
       // asked for is Graph's.
       errorText.text = ""
@@ -469,8 +470,9 @@ Column {
 
     Button {
       objectName: "outlook-sign-in"
-      visible: !root.signedIn || root.graphConsentNeeded
-      text: root.graphConsentNeeded ? "Allow Microsoft Graph..." : "Sign in with Microsoft..."
+      visible: !root.signedIn || root.graphConsentNeeded || root.rulesConsentNeeded
+      text: root.graphConsentNeeded ? "Allow Microsoft Graph..."
+        : root.rulesConsentNeeded ? "Allow the Screener's rules..." : "Sign in with Microsoft..."
       enabled: !root.busy && !(root.auth && root.auth.refreshBusy === true)
         && addressField.text.trim() !== ""
         && (root.usingBuiltinClient || clientIdField.text.trim() !== "")
