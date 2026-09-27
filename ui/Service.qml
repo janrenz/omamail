@@ -1704,6 +1704,14 @@ Item {
     return out
   }
   readonly property bool screenerAvailable: !!screenerHost && screenerHost.available
+  // Whether the switch is offered: one mailbox that can hold the places and
+  // has not got them, or in All mailboxes any such mailbox - which it turns on.
+  readonly property bool screenerOffered: {
+    if (!unified) return screenerAvailable && !screenerOn
+    var any = false
+    eachHost(function(host) { if (host.screener.available && !host.screener.on) any = true })
+    return any
+  }
   readonly property bool screenerOn: unified ? Object.keys(screenerLedgers).length > 0
     : !!screenerHost && screenerHost.on
   property string unifiedPlace: ""
@@ -1727,7 +1735,10 @@ Item {
     : mailboxes
   readonly property string tabKey: place !== "" ? "place:" + place : mailboxKey
 
-  function enableScreener() { if (screenerHost) screenerHost.enable() }
+  function enableScreener() {
+    if (!unified) { if (screenerHost) screenerHost.enable(); return }
+    eachHost(function(host) { if (host.screener.available && !host.screener.on) host.screener.enable() })
+  }
   function disableScreener() { if (screenerHost) screenerHost.disable() }
 
   function selectPlace(key) {

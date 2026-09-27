@@ -198,12 +198,13 @@ Item {
     anchors.right: edge.left
     anchors.bottom: parent.bottom
 
-    // Offered where the mailbox can hold the places and they are not on yet.
+    // Offered where the mailbox can hold the places and they are not on yet;
+    // in All mailboxes, for every mailbox that can and has not.
     // It creates their folders and starts sorting new senders, so it is a
     // row a person chooses rather than something that happens.
     Entry {
       x: Style.space(6)
-      visible: !!root.service && root.service.screenerAvailable && !root.service.screenerOn
+      visible: !!root.service && root.service.screenerOffered === true
       label: "Turn on the Screener"
       icon: "people"
       onActivated: root.service.enableScreener()
