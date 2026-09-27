@@ -206,7 +206,10 @@ Item {
                 anchors.right: title.right
                 anchors.top: title.bottom
                 visible: text !== ""
-                text: String(line.modelData.location || "")
+                // Whose calendar, where more than one mailbox shares the view.
+                text: [String(line.modelData.location || ""),
+                       root.controller && root.controller.accountLabelFor ? root.controller.accountLabelFor(line.modelData.sourceId) : ""]
+                  .filter(function(part) { return part !== "" }).join(" · ")
                 color: root.dimmerColor
                 font.family: root.panelFontFamily
                 font.pixelSize: Style.font.caption

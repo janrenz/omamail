@@ -286,6 +286,8 @@ Item {
                 readonly property bool narrow: width < Style.space(44)
                 readonly property color eventColor: calendarPalette.colorFor(
                   root.controller ? root.controller.colorKeyFor(event.sourceId) : "")
+                readonly property string account: root.controller && root.controller.accountLabelFor
+                  ? root.controller.accountLabelFor(event.sourceId) : ""
                 x: Style.space(2) + modelData.lane * laneWidth
                 // A gap between lanes, none at the column's own edge.
                 width: Math.max(Style.space(6), modelData.span * laneWidth
@@ -336,21 +338,38 @@ Item {
                     visible: !eventBlock.narrow && eventBlock.height >= Style.font.caption * 2.9 + Style.space(10)
                     text: Calendar.two(new Date(eventBlock.event.start.ms).getHours()) + ":"
                       + Calendar.two(new Date(eventBlock.event.start.ms).getMinutes())
+                      + (eventBlock.account !== "" && eventBlock.modelData.lanes === 1 ? " · " + eventBlock.account : "")
+                    color: root.dimColor
+                    elide: Text.ElideRight
+                    font.family: root.panelFontFamily
+                    font.pixelSize: Style.font.caption
+                    textFormat: Text.PlainText
+                  }
+                  // Whose calendar, in a view that has more than one mailbox's:
+                  // after the time in a column of its own, and in a shared lane
+                  // on a line of its own, so it never costs the time its place.
+                  Text {
+                    width: parent.width
+                    visible: eventBlock.account !== "" && !eventBlock.narrow && eventBlock.modelData.lanes > 1
+                      && eventBlock.height >= Style.font.caption * 4.2 + Style.space(10)
+                    text: eventBlock.account
                     color: root.dimColor
                     font.family: root.panelFontFamily
                     font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
                     textFormat: Text.PlainText
                   }
                 }
                 MouseArea {
                   id: eventHover
                   anchors.fill: parent
-                  hoverEnabled: eventBlock.narrow
+                  hoverEnabled: eventBlock.narrow || eventBlock.account !== ""
                   cursorShape: Qt.PointingHandCursor
                   onClicked: root.eventActivated(eventBlock.event)
                 }
-                ToolTip.visible: eventBlock.narrow && eventHover.containsMouse
+                ToolTip.visible: eventHover.hoverEnabled && eventHover.containsMouse
                 ToolTip.text: String(eventBlock.event.summary || "Untitled event")
+                  + (eventBlock.account !== "" ? "\n" + eventBlock.account : "")
                 ToolTip.delay: 400
               }
             }

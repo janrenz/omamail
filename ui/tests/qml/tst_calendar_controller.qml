@@ -26,6 +26,7 @@ Item {
       callback(mailService.nextResult, mailService.nextError)
     } })
     property bool unifiedCalendarView: false
+    property bool unified: false
     property var accountSummaries: [
       { id: "imap:work@example.com", email: "work@example.com",
         provider: "imap", signedIn: true },
@@ -94,6 +95,7 @@ Item {
       mailService.configCallback = null
       discoverySpy.clear()
       mailService.unifiedCalendarView = false
+      mailService.unified = false
       controller.accountId = "imap:work@example.com"
       controller.refreshScope = ""
       controller.refreshAccountId = ""
@@ -354,6 +356,22 @@ Item {
     // unified view that is not the mailbox — the same calendars are shown
     // whichever one is open — so keying by the account stored a copy of the
     // same events per account and made every mailbox switch a cache miss.
+    function test_the_unified_view_says_whose_calendar_an_event_is_on() {
+      mailService.unifiedCalendarView = true
+      compare(controller.accountLabelFor("caldav:team"), "work@example.com")
+      compare(controller.accountLabelFor("google:two@gmail.com"), "two@gmail.com")
+      compare(controller.accountLabelFor("missing"), "")
+      mailService.unifiedCalendarView = false
+      compare(controller.accountLabelFor("caldav:team"), "", "one mailbox's calendar needs no name on it")
+    }
+
+    function test_all_mailboxes_shows_every_calendar() {
+      mailService.unified = true
+      compare(controller.unifiedCalendarView, true)
+      compare(controller.contextSources.sources.length, 3)
+      mailService.unified = false
+    }
+
     function test_the_scope_is_the_mailbox_only_when_the_view_follows_it() {
       compare(controller.calendarScope, "imap:work@example.com")
       mailService.unifiedCalendarView = true

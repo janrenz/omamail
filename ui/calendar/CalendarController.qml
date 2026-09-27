@@ -67,8 +67,11 @@ Item {
   property string writeUrl: ""
   property bool eventWriting: false
   readonly property var availableSources: withAccountSources(sourceList)
+  // Every mailbox's calendars, when the setting says so, and while the mail
+  // itself is every mailbox's: "All mailboxes" beside one account's week would
+  // be two answers to which mail this is.
   readonly property bool unifiedCalendarView: !!service
-    && service.unifiedCalendarView === true
+    && (service.unifiedCalendarView === true || service.unified === true)
   readonly property var contextSources: unifiedCalendarView
     ? availableSources : Sources.forAccount(availableSources, accountId)
   // One name for every mailbox, because the unified view is one view.
@@ -514,6 +517,20 @@ Item {
     refreshAfterSourceWrite = true
     savingSource = true
     writeSources()
+  }
+
+  // The mailbox an event came from, for a view that shows more than one:
+  // the unified view draws every account's calendars in one grid, and the
+  // colour alone says which calendar, not whose. "" where there is only one.
+  function accountLabelFor(sourceId) {
+    var groups = sourceGroups || []
+    if (groups.length < 2) return ""
+    for (var g = 0; g < groups.length; g++) {
+      var calendars = groups[g].calendars || []
+      for (var c = 0; c < calendars.length; c++)
+        if (calendars[c] && calendars[c].id === String(sourceId)) return String(groups[g].accountLabel || "")
+    }
+    return ""
   }
 
   function colorKeyFor(sourceId) {

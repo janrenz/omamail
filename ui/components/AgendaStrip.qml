@@ -83,6 +83,8 @@ Column {
           + Calendar.two(new Date(modelData.start.ms).getMinutes())
       text: (tomorrow ? "Tomorrow " : "") + when + "  " + (modelData.summary || "Untitled event")
         + (modelData.location ? " · " + modelData.location : "")
+        + (root.controller && root.controller.accountLabelFor && root.controller.accountLabelFor(modelData.sourceId) !== ""
+          ? " · " + root.controller.accountLabelFor(modelData.sourceId) : "")
       color: !modelData.start.allDay && modelData.start.ms <= root.nowMs ? root.accentColor : root.textColor
       font.family: root.panelFontFamily
       font.pixelSize: Style.font.bodySmall

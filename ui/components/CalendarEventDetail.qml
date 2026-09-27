@@ -46,6 +46,8 @@ Rectangle {
         && Number(event.recurrenceIdMs || 0) <= 0
         && String(event.source && event.source.recurrenceId || "") === ""
         && Calendar.caldavEventUrl(root.source.url, event) !== "")
+  readonly property string accountLabel: controller && controller.accountLabelFor && event
+    ? controller.accountLabelFor(event.sourceId) : ""
   readonly property color eventColor: calendarPalette.colorFor(
     source ? source.colorKey : "accent")
   readonly property string meetingLink: httpLink(event ? event.meetLink : "")
@@ -164,6 +166,7 @@ Rectangle {
           anchors.verticalCenter: parent.verticalCenter
           text: root.source
             ? String(root.source.name || root.source.id || "Calendar") : "Calendar"
+          + (root.accountLabel !== "" ? " · " + root.accountLabel : "")
           color: root.dimColor
           font.family: root.panelFontFamily
           font.pixelSize: Style.font.bodySmall
