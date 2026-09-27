@@ -320,8 +320,11 @@ Item {
                     font.pixelSize: Style.font.caption
                     font.bold: true
                     // A lane is narrow, so the title may take the lines the
-                    // block has room for rather than one line cut short.
-                    wrapMode: Text.WordWrap
+                    // block has room for rather than one line cut short - at
+                    // a word boundary where there is one, inside the word
+                    // where a word is wider than the lane, since a word cut
+                    // off by the block's edge reads as a different word.
+                    wrapMode: Text.Wrap
                     maximumLineCount: Math.max(1, Math.floor((eventBlock.height - Style.space(10))
                       / (Style.font.caption * 1.35)) - (eventBlock.narrow ? 0 : 1))
                     elide: Text.ElideRight
