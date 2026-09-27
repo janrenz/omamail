@@ -283,7 +283,7 @@ Item {
                 readonly property var event: modelData.event
                 readonly property real laneWidth: (dayColumn.width - Style.space(4)) / Math.max(1, modelData.lanes)
                 // Narrow enough that the title is all that fits.
-                readonly property bool narrow: width < Style.space(56)
+                readonly property bool narrow: width < Style.space(44)
                 readonly property color eventColor: calendarPalette.colorFor(
                   root.controller ? root.controller.colorKeyFor(event.sourceId) : "")
                 x: Style.space(2) + modelData.lane * laneWidth
@@ -319,14 +319,13 @@ Item {
                     font.family: root.panelFontFamily
                     font.pixelSize: Style.font.caption
                     font.bold: true
-                    // A lane is narrow, so the title may take the lines the
-                    // block has room for rather than one line cut short - at
-                    // a word boundary where there is one, inside the word
-                    // where a word is wider than the lane, since a word cut
-                    // off by the block's edge reads as a different word.
-                    wrapMode: Text.Wrap
-                    maximumLineCount: Math.max(1, Math.floor((eventBlock.height - Style.space(10))
-                      / (Style.font.caption * 1.35)) - (eventBlock.narrow ? 0 : 1))
+                    // A shared lane may take the lines its block has room for,
+                    // at word boundaries. A lane too narrow for a word shows
+                    // one elided line instead - broken inside its words, a
+                    // title reads as other words - and the whole title on hover.
+                    wrapMode: eventBlock.narrow ? Text.NoWrap : Text.WordWrap
+                    maximumLineCount: eventBlock.narrow ? 1 : Math.max(1, Math.floor(
+                      (eventBlock.height - Style.space(10)) / (Style.font.caption * 1.35)) - 1)
                     elide: Text.ElideRight
                     textFormat: Text.PlainText
                   }
@@ -344,10 +343,15 @@ Item {
                   }
                 }
                 MouseArea {
+                  id: eventHover
                   anchors.fill: parent
+                  hoverEnabled: eventBlock.narrow
                   cursorShape: Qt.PointingHandCursor
                   onClicked: root.eventActivated(eventBlock.event)
                 }
+                ToolTip.visible: eventBlock.narrow && eventHover.containsMouse
+                ToolTip.text: String(eventBlock.event.summary || "Untitled event")
+                ToolTip.delay: 400
               }
             }
 
