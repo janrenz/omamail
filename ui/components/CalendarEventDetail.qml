@@ -341,7 +341,10 @@ Rectangle {
 
       Text {
         visible: !!root.extra && String(root.extra.myPartstat || "") !== ""
-        text: root.extra ? "Your answer: " + root.answerLabel(root.extra.myPartstat) : ""
+        // Exchange marks an invitation it filed on its own as tentative too,
+        // so that one is said as where it stands rather than as an answer.
+        text: !root.extra ? "" : ({ ACCEPTED: "You accepted", DECLINED: "You declined",
+          TENTATIVE: "Tentative in your calendar" })[root.extra.myPartstat] || ""
         color: root.dimColor
         font.family: root.panelFontFamily
         font.pixelSize: Style.font.bodySmall
