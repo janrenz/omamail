@@ -123,4 +123,18 @@ assert.strictEqual(Object.keys(screener.bubble(bubbled, "<m@x>", "").bubbles).le
   assert.strictEqual(shown[1].bubbleLabel, undefined, "a message with no time keeps its date")
 }
 
+// Exchange rules: each decided sender under the rule of their place, the
+// Imbox's as the ones to forget, and another machine's taken over only where
+// this one has not decided.
+{
+  const lists = JSON.parse(JSON.stringify(screener.ruleLists(decided)))
+  assert.deepStrictEqual(lists, { rules: { feed: ["news@x.y"], papertrail: ["shop@x.y"], screenedout: ["spam@x.y"] },
+    forget: ["friend@x.y"] })
+  const adopted = screener.adoptRules(decided, { feed: ["spam@x.y", "Other@X.Y"], papertrail: ["bill@x.y"], inbox: ["odd@x.y"] })
+  assert.strictEqual(adopted.senders["spam@x.y"], "out", "what this machine decided stands")
+  assert.strictEqual(adopted.senders["other@x.y"], "feed")
+  assert.strictEqual(adopted.senders["bill@x.y"], "papertrail")
+  assert.strictEqual(adopted.senders["odd@x.y"], undefined, "a place the rules do not keep is not read")
+}
+
 console.log("test_screener.js ok")

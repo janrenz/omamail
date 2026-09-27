@@ -102,6 +102,7 @@ pub const ALL: &[&str] = &[
     "auth.clear",
     "outlook.graphSend",
     "outlook.connectionCheck",
+    "outlook.screenerRules",
     "hey.probe",
     "hey.status",
     "hey.profile",

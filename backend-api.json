@@ -105,6 +105,7 @@
     "auth.clear",
     "outlook.graphSend",
     "outlook.connectionCheck",
+    "outlook.screenerRules",
     "hey.probe",
     "hey.status",
     "hey.profile",
@@ -792,13 +793,44 @@
       "equals": {
         "message": "auth_account_missing"
       }
+    },
+    {
+      "name": "Screener rules read the mailbox's own Exchange token",
+      "method": "outlook.screenerRules",
+      "params": {
+        "accountId": "outlook:missing@example.org",
+        "operation": "status"
+      },
+      "errorCode": -32000,
+      "equals": {
+        "message": "auth_account_missing"
+      }
+    },
+    {
+      "name": "Screener rules refuse a place they do not keep",
+      "method": "outlook.screenerRules",
+      "params": {
+        "accountId": "outlook:missing@example.org",
+        "operation": "sync",
+        "rules": {
+          "inbox": []
+        }
+      },
+      "errorCode": -32000,
+      "equals": {
+        "message": "invalid_params"
+      }
     }
   ],
   "unreleased": {
-    "methods": [],
+    "methods": [
+      "outlook.screenerRules"
+    ],
     "cases": [
       "Exchange calendar request reads the mailbox's own Exchange token",
-      "Exchange event detail reads the mailbox's own Exchange token"
+      "Exchange event detail reads the mailbox's own Exchange token",
+      "Screener rules read the mailbox's own Exchange token",
+      "Screener rules refuse a place they do not keep"
     ]
   }
 }

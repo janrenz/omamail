@@ -14,6 +14,7 @@ pub mod hey_actions;
 pub mod imap;
 pub mod jmap;
 pub mod outlook;
+pub mod outlook_rules;
 
 const CAPABILITIES: &[&str] = &[
     "labels",

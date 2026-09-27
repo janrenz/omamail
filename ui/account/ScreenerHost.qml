@@ -46,7 +46,9 @@ QtObject {
   function enable() {
     if (!available) { account.fail("This mailbox cannot hold the Screener's places"); return }
     save(Screener.enabled(ledger))
-    ensureFolders(function() { account.note("The Screener is on") })
+    // Rules are read once the entry says the Screener is on; if it does not
+    // yet, the first sweep reads them.
+    ensureFolders(function() { account.note("The Screener is on"); host.pullRules() })
   }
 
   function disable() {
@@ -54,6 +56,7 @@ QtObject {
     value.on = false
     place = ""
     save(value)
+    clearRules()
   }
 
   // ---------------------------------------------------------------- folders
@@ -114,6 +117,7 @@ QtObject {
     var who = Screener.address(row.from)
     if (who === "") return
     save(Screener.decide(ledger, who, decision))
+    scheduleRules()
     var folder = Screener.DECISIONS[decision]
     if (folder) {
       var ids = account.messages.filter(function(m) {
@@ -169,6 +173,7 @@ QtObject {
     }
     for (var key in byFolder) moveTo(byFolder[key], key)
     bringBackDue()
+    if (!rulesPulled) pullRules()
   }
 
   function bringBackDue() {
@@ -203,6 +208,85 @@ QtObject {
               })
           })
         })
+      })
+  }
+
+  // ----------------------------------------------------------- server rules
+
+  // An Exchange mailbox signed in with Exchange Web Services also sorts on
+  // the server: each place's senders become an inbox rule, so mail reaches
+  // The Feed on the phone and while this app is closed - see
+  // src/providers/outlook_rules.rs. The sweep above keeps running either
+  // way; a rule only gets there first.
+  readonly property bool rulesReachable: available && account.providerId === "outlook"
+    && !!account.backend && account.backend.ready && account.backend.apiVersion >= 6
+    && String(account.imapSettings && account.imapSettings.calendar || "").toLowerCase() === "ews"
+  readonly property bool rulesAvailable: on && rulesReachable && rulesRefusal === ""
+  // Why this mailbox's rules are not written, for the rest of the session:
+  // Outlook for Windows' own rules in the way, or Exchange refusing the
+  // token. A network failure is not remembered; the next decision tries again.
+  property string rulesRefusal: ""
+  property bool rulesPulled: false
+
+  function rulesCode(error) { return String(error && error.message || error || "") }
+
+  function rulesFailed(error) {
+    var code = rulesCode(error)
+    var why = ({
+      rules_outlook_blob: "Outlook for Windows keeps its own rules in this mailbox, so the Screener sorts only while this app is open",
+      rules_auth_refused: "Exchange did not let the Screener write rules, so it sorts only while this app is open",
+      rules_over_quota: "This mailbox has no room for more rules, so the Screener sorts only while this app is open",
+      rules_too_many_senders: "Too many senders for one rule, so the Screener sorts only while this app is open"
+    })[code]
+    if (!why) return
+    rulesRefusal = code
+    account.note(why)
+  }
+
+  // Decisions arrive one key press at a time; they go out together.
+  property Timer rulesTimer: Timer {
+    interval: 3000
+    onTriggered: host.syncRules()
+  }
+  function scheduleRules() { if (rulesAvailable) rulesTimer.restart() }
+
+  // Once a session: what another machine decided, read off the rules, for
+  // senders this one has never been asked about - then this machine's own
+  // decisions written back.
+  function pullRules() {
+    if (!rulesAvailable || rulesPulled) return
+    rulesPulled = true
+    account.backend.call("outlook.screenerRules", { accountId: account.accountId, operation: "status" },
+      function(result, error) {
+        if (!host) return
+        if (error) { host.rulesPulled = false; host.rulesFailed(error); return }
+        if (result && result.blob === true) { host.rulesFailed("rules_outlook_blob"); return }
+        var adopted = Screener.adoptRules(host.ledger, result && result.places)
+        if (JSON.stringify(adopted.senders) !== JSON.stringify(host.ledger.senders)) host.save(adopted)
+        host.scheduleRules()
+      })
+  }
+
+  function syncRules() {
+    if (!rulesAvailable) return
+    ensureFolders(function() {
+      if (!host.rulesAvailable) return
+      var lists = Screener.ruleLists(host.ledger)
+      host.account.backend.call("outlook.screenerRules", {
+        accountId: host.account.accountId, operation: "sync", rules: lists.rules, forget: lists.forget
+      }, function(result, error) { if (host && error) host.rulesFailed(error) })
+    })
+  }
+
+  // Switched off, the server stops sorting too: the three rules go, and
+  // nothing else of the mailbox's.
+  function clearRules() {
+    rulesTimer.stop()
+    if (!rulesReachable || rulesRefusal !== "") return
+    rulesPulled = false
+    account.backend.call("outlook.screenerRules", { accountId: account.accountId, operation: "clear" },
+      function(result, error) {
+        if (host && error) host.account.fail("Could not remove the Screener's rules from Exchange")
       })
   }
 }

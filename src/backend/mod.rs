@@ -212,6 +212,9 @@ impl Session {
         if method == "outlook.graphSend" {
             return Box::pin(self.auth.call(method, params)).await;
         }
+        if method == "outlook.screenerRules" {
+            return Box::pin(crate::providers::outlook_rules::call(params)).await;
+        }
         if method == "outlook.connectionCheck" {
             return Box::pin(crate::providers::outlook::connection_check(params)).await;
         }
