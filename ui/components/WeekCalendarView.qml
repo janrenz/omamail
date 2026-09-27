@@ -274,21 +274,29 @@ Item {
             }
 
             Repeater {
-              model: dayColumn.dayEvents
+              // Overlapping events share the column in lanes - see
+              // Calendar.dayLanes - rather than being drawn on top of each other.
+              model: Calendar.dayLanes(dayColumn.dayEvents, dayColumn.modelData)
               delegate: Rectangle {
                 id: eventBlock
                 required property var modelData
+                readonly property var event: modelData.event
+                readonly property real laneWidth: (dayColumn.width - Style.space(4)) / Math.max(1, modelData.lanes)
+                // Narrow enough that the title is all that fits.
+                readonly property bool narrow: width < Style.space(56)
                 readonly property color eventColor: calendarPalette.colorFor(
-                  root.controller ? root.controller.colorKeyFor(modelData.sourceId) : "")
-                x: Style.space(3)
-                width: dayColumn.width - Style.space(6)
-                y: Calendar.eventTop(modelData, dayColumn.modelData,
+                  root.controller ? root.controller.colorKeyFor(event.sourceId) : "")
+                x: Style.space(2) + modelData.lane * laneWidth
+                // A gap between lanes, none at the column's own edge.
+                width: Math.max(Style.space(6), modelData.span * laneWidth
+                  - (modelData.lane + modelData.span < modelData.lanes ? Style.space(2) : 0))
+                y: Calendar.eventTop(event, dayColumn.modelData,
                   root.firstHour, timeline.hourHeight)
-                height: Calendar.eventHeight(modelData, dayColumn.modelData, timeline.hourHeight)
+                height: Calendar.eventHeight(event, dayColumn.modelData, timeline.hourHeight)
                 radius: Style.cornerRadius
                 color: Qt.rgba(eventColor.r, eventColor.g, eventColor.b,
-                  String(modelData.uid || "") === root.selectedEventId ? 0.3 : 0.17)
-                border.width: String(modelData.uid || "") === root.selectedEventId ? 2 : 1
+                  String(event.uid || "") === root.selectedEventId ? 0.3 : 0.17)
+                border.width: String(event.uid || "") === root.selectedEventId ? 2 : 1
                 border.color: eventColor
                 clip: true
 
@@ -301,22 +309,31 @@ Item {
                 }
                 Column {
                   anchors.fill: parent
-                  anchors.margins: Style.space(5)
+                  anchors.margins: eventBlock.narrow ? Style.space(3) : Style.space(5)
+                  anchors.leftMargin: Style.space(6)
                   spacing: Style.space(1)
                   Text {
                     width: parent.width
-                    text: eventBlock.modelData.summary || "Untitled event"
+                    text: eventBlock.event.summary || "Untitled event"
                     color: root.textColor
                     font.family: root.panelFontFamily
                     font.pixelSize: Style.font.caption
                     font.bold: true
+                    // A lane is narrow, so the title may take the lines the
+                    // block has room for rather than one line cut short.
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: Math.max(1, Math.floor((eventBlock.height - Style.space(10))
+                      / (Style.font.caption * 1.35)) - (eventBlock.narrow ? 0 : 1))
                     elide: Text.ElideRight
                     textFormat: Text.PlainText
                   }
                   Text {
                     width: parent.width
-                    text: Calendar.two(new Date(eventBlock.modelData.start.ms).getHours()) + ":"
-                      + Calendar.two(new Date(eventBlock.modelData.start.ms).getMinutes())
+                    // Only with room for it under the title: a half-hour
+                    // block showing half a time says less than none.
+                    visible: !eventBlock.narrow && eventBlock.height >= Style.font.caption * 2.9 + Style.space(10)
+                    text: Calendar.two(new Date(eventBlock.event.start.ms).getHours()) + ":"
+                      + Calendar.two(new Date(eventBlock.event.start.ms).getMinutes())
                     color: root.dimColor
                     font.family: root.panelFontFamily
                     font.pixelSize: Style.font.caption
@@ -326,7 +343,7 @@ Item {
                 MouseArea {
                   anchors.fill: parent
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: root.eventActivated(eventBlock.modelData)
+                  onClicked: root.eventActivated(eventBlock.event)
                 }
               }
             }
