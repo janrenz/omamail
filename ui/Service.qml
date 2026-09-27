@@ -1687,7 +1687,9 @@ Item {
     ? Number(unifiedSnapshot.totalUnread || 0) : (current ? current.inboxUnread : 0)
   readonly property var messages: unified
     ? (place !== "" ? Screener.filterMerged(unifiedMessages, place, screenerLedgers) : unifiedMessages)
-    : (current ? Screener.filter(current.messages, place, current.screener.ledger) : [])
+    : !current ? [] : place === "bubbleup"
+      ? Screener.withBubbleTimes(current.messages, current.screener.ledger)
+      : Screener.filter(current.messages, place, current.screener.ledger)
 
   // ------------------------------------------------------- the Screener
   //
@@ -1763,6 +1765,12 @@ Item {
     })
   }
 
+  // Whether the row's own mailbox has the Screener on, for the menus.
+  function screenerOnFor(messageId) {
+    var host = unified ? hostForId(messageId) : current
+    return !!host && host.screener.on
+  }
+
   // One of the Screener's keys, on the row under the cursor. Answers whether
   // anything happened, so a key with no Screener behind it passes through.
   function screenerKey(id, messageId) {
@@ -1778,6 +1786,7 @@ Item {
     if (decisions[id]) screener.decide(row, decisions[id])
     else if (id === "screenerReplyLater") screener.replyLater(row)
     else if (id === "screenerSetAside") screener.setAside(row)
+    else if (id === "screenerBubbleLater") screener.bubble(row, "later")
     else if (id === "screenerBubbleTomorrow") screener.bubble(row, "tomorrow")
     else if (id === "screenerBubbleNextWeek") screener.bubble(row, "nextweek")
     else return false

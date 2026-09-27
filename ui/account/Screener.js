@@ -299,6 +299,19 @@ function bubbleTime(choice, nowMs) {
   return at.toISOString()
 }
 
+// The rows of Bubble Up, each carrying when it comes back.
+function withBubbleTimes(rows, raw, nowMs) {
+  var value = normalize(raw)
+  return (Array.isArray(rows) ? rows : []).map(function(row) {
+    var until = bubbleUntil(value, row && row.messageId)
+    if (until === "") return row
+    var copy = {}
+    for (var key in row) copy[key] = row[key]
+    copy.bubbleLabel = "Back " + whenLabel(until, nowMs)
+    return copy
+  })
+}
+
 function two(n) { return (n < 10 ? "0" : "") + n }
 
 // "tomorrow at 08:00", "today at 17:00", "Mon 5 Oct at 08:00".

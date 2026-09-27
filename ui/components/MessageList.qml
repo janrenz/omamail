@@ -4,6 +4,7 @@ import qs.Ui
 import "../account/Model.js" as Model
 import "../account/Unified.js" as Unified
 import "../agent/Agent.js" as Agent
+import "../account/Screener.js" as Screener
 
 // The message list. A Repeater in a Column rather than a ListView because the
 // panel already owns one Flickable and nesting a second scroller inside it
@@ -108,6 +109,11 @@ Column {
       onStarToggled: root.rowActionRequested(modelData.id, "star")
       onArchiveRequested: root.rowActionRequested(modelData.id, "archive")
       onTrashRequested: root.rowActionRequested(modelData.id, "trash")
+      choices: root.service.place === "screener" ? Screener.CHOICES : []
+      onChoiceRequested: function(place) {
+        root.service.screenerKey(({ imbox: "screenerImbox", feed: "screenerFeed",
+          papertrail: "screenerPapertrail", out: "screenerOut" })[place], modelData.id)
+      }
       onMenuRequested: function(sceneX, sceneY) {
         root.menuRequested(modelData.id, sceneX, sceneY)
       }

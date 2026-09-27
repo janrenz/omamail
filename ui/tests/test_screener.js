@@ -113,4 +113,14 @@ assert.strictEqual(Object.keys(screener.bubble(bubbled, "<m@x>", "").bubbles).le
   assert.deepStrictEqual(ids(screener.filterMerged(merged, "feed", ledgers)), ids(merged), "folder places are not merged")
 }
 
+// Bubble Up says when each message comes back.
+{
+  const now = Date.parse("2026-09-27T10:00:00")
+  const ledger = screener.bubble(base, "<m@x>", new Date(2026, 8, 28, 8, 0).toISOString(), "S")
+  const shown = screener.withBubbleTimes([row("m", "a@x.y", "2026-09-20T00:00:00Z", { messageId: "<m@x>" }),
+    row("n", "a@x.y", "2026-09-20T00:00:00Z", { messageId: "<n@x>" })], ledger, now)
+  assert.strictEqual(shown[0].bubbleLabel, "Back tomorrow at 08:00")
+  assert.strictEqual(shown[1].bubbleLabel, undefined, "a message with no time keeps its date")
+}
+
 console.log("test_screener.js ok")

@@ -55,6 +55,10 @@ Rectangle {
   signal archiveRequested()
   signal trashRequested()
   signal menuRequested(real sceneX, real sceneY)
+  // The Screener's answers, drawn on the row in the Screener's own list:
+  // [{place, label}], and the one pressed.
+  property var choices: []
+  signal choiceRequested(string place)
 
   // Hovered by a handler rather than by the MouseArea's `containsMouse`: a
   // button on the row has a MouseArea of its own, and the pointer moving onto
@@ -231,8 +235,9 @@ Rectangle {
         anchors.right: parent.right
         anchors.baseline: sender.baseline
         textFormat: Text.PlainText
-        text: root.summary.time
-        color: root.dimColor
+        // In Bubble Up, when it comes back rather than when it came.
+        text: root.summary.bubbleLabel || root.summary.time
+        color: root.summary.bubbleLabel ? root.accentColor : root.dimColor
         font.family: root.panelFontFamily
         font.pixelSize: Style.font.caption
       }
@@ -265,6 +270,46 @@ Rectangle {
       elide: Text.ElideRight
       maximumLineCount: 1
       horizontalAlignment: root.textAlignment
+    }
+
+    Row {
+      objectName: "screener-choices"
+      visible: root.choices.length > 0
+      topPadding: Style.space(4)
+      spacing: Style.space(6)
+
+      Repeater {
+        model: root.choices
+
+        Rectangle {
+          id: choice
+          required property var modelData
+          readonly property bool out: modelData.place === "out"
+          implicitWidth: choiceText.implicitWidth + Style.space(16)
+          implicitHeight: choiceText.implicitHeight + Style.space(6)
+          radius: Style.cornerRadius
+          color: choiceMouse.containsMouse ? Style.hoverFillFor(root.textColor, root.accentColor) : "transparent"
+          border.width: 1
+          border.color: out ? root.urgentColor : root.dimColor
+
+          Text {
+            id: choiceText
+            anchors.centerIn: parent
+            text: choice.modelData.label
+            color: choice.out ? root.urgentColor : root.textColor
+            font.family: root.panelFontFamily
+            font.pixelSize: Style.font.caption
+            textFormat: Text.PlainText
+          }
+          MouseArea {
+            id: choiceMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.choiceRequested(choice.modelData.place)
+          }
+        }
+      }
     }
   }
 

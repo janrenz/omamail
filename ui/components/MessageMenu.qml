@@ -30,7 +30,12 @@ Item {
   property int cursorIndex: -1
   readonly property var menuRows: [continueRow, replyRow, replyAllRow, forwardRow, archiveRow,
     unarchiveRow, moveRow,
-    trashRow, spamRow, readRow, starRow, browserRow, aiRow]
+    trashRow, spamRow, readRow, starRow, laterRow, tomorrowRow, nextWeekRow, replyLaterRow,
+    setAsideRow, browserRow, aiRow]
+  // HEY's verbs, where the row's mailbox has the Screener on. Reply Later is
+  // the star under its HEY name, so it says what it is for here.
+  readonly property bool hey: !!service && !memberOnly && messageId !== ""
+    && typeof service.screenerOnFor === "function" && service.screenerOnFor(messageId)
   // Whether this message is archived — out of the inbox and not somewhere
   // that has its own verb. Read off the summary the menu was opened on rather
   // than asked of the service, because the menu is about one message. IMAP
@@ -121,6 +126,12 @@ Item {
     menu.close()
     if (member) root.memberActionRequested(action, id)
     else root.actionRequested(action, id)
+  }
+
+  function screener(key) {
+    var id = root.messageId
+    menu.close()
+    root.service.screenerKey(key, id)
   }
 
   function compose(mode) {
@@ -241,6 +252,22 @@ Item {
         text: root.summary && root.summary.starred ? "Unstar" : "Star"
         onActivated: root.run(root.summary && root.summary.starred ? "unstar" : "star")
       }
+
+      MenuSeparatorLine {
+        visible: root.hey
+        width: menu.width - menu.leftPadding - menu.rightPadding
+        lineColor: root.textColor
+      }
+      MenuRow { id: laterRow; visible: root.hey; text: "Snooze until later today"; onActivated: root.screener("screenerBubbleLater") }
+      MenuRow { id: tomorrowRow; visible: root.hey; text: "Snooze until tomorrow"; onActivated: root.screener("screenerBubbleTomorrow") }
+      MenuRow { id: nextWeekRow; visible: root.hey; text: "Snooze until next week"; onActivated: root.screener("screenerBubbleNextWeek") }
+      MenuRow {
+        id: replyLaterRow
+        visible: root.hey
+        text: root.summary && root.summary.starred ? "Done with Reply Later" : "Reply later"
+        onActivated: root.screener("screenerReplyLater")
+      }
+      MenuRow { id: setAsideRow; visible: root.hey; text: "Set aside"; onActivated: root.screener("screenerSetAside") }
 
       MenuSeparatorLine {
         width: menu.width - menu.leftPadding - menu.rightPadding

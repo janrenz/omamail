@@ -24,6 +24,10 @@ Item {
     property bool hasLabels: true
     property string rawLabelId: ""
     property var messages: []
+    property bool screener: false
+    property var screenerCalls: []
+    function screenerOnFor(id) { return screener }
+    function screenerKey(key, id) { screenerCalls = screenerCalls.concat([key + " " + id]); return true }
   }
 
   Omamail.MessageMenu {
@@ -208,6 +212,24 @@ Item {
       compare(menu.summary.inSpam, true, "the row is in Spam the moment it is reported")
       compare(menu.archived, false)
       compare(unarchiveRow().visible, false)
+    }
+
+    // HEY's verbs are offered only where the row's mailbox has them on, and
+    // go to the Screener under the row's id.
+    function test_snooze_is_offered_where_the_screener_is_on() {
+      var summary = archivedMessage()
+      summary.inInbox = true
+      show(summary)
+      var snooze = menu.menuRows.filter(function(r) { return r.text === "Snooze until tomorrow" })[0]
+      verify(!!snooze)
+      compare(snooze.visible, false)
+      menu.close()
+      fakeService.screener = true
+      show(summary)
+      compare(snooze.visible, true)
+      snooze.activated()
+      compare(fakeService.screenerCalls, ["screenerBubbleTomorrow " + summary.id])
+      fakeService.screener = false
     }
   }
 }

@@ -14,9 +14,29 @@ Item {
     panelFontFamily: "monospace"
     summary: ({id:"one",subject:"Title",from:{display:"Sender"},snippet:"Description",time:"09:14",unread:true,starred:false})
   }
+  SignalSpy { id: choiceSpy; target: row; signalName: "choiceRequested" }
   TestCase {
     name: "MessageRowLayout"
     when: windowShown
+    function test_the_screener_asks_on_the_row_and_bubble_up_says_when() {
+      row.width=600
+      row.hasCursor=false
+      row.checked=false
+      row.summary={id:"one",subject:"Title",from:{display:"Sender"},snippet:"Description",time:"09:14",unread:false,starred:false,
+        bubbleLabel:"Back tomorrow at 08:00"}
+      compare(findChild(row,"message-time").text,"Back tomorrow at 08:00")
+      var bar=findChild(row,"screener-choices")
+      verify(!bar.visible)
+      row.choices=[{place:"imbox",label:"Imbox"},{place:"out",label:"Screen out"}]
+      waitForRendering(row)
+      verify(bar.visible)
+      choiceSpy.clear()
+      var last=bar.children[1]
+      mouseClick(last, last.width/2, last.height/2)
+      compare(choiceSpy.count,1)
+      compare(choiceSpy.signalArguments[0][0],"out")
+      row.choices=[]
+    }
     function test_time_stays_fixed_when_actions_appear() {
       row.hasCursor=false
       row.checked=false
