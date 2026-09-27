@@ -325,11 +325,26 @@ function hasSavedAccounts(list) {
 
 // Shown in the switcher. A pending account has neither a label nor an address
 // yet and still needs a name, or its row is an empty strip nobody can aim at.
-function label(account) {
+//
+// Given the whole list, a mailbox whose address shares its local part with
+// another one is named by its domain instead: "jan" twice says nothing about
+// which is which, "example.org" and "example.com" does. A label somebody
+// chose still wins.
+function label(account, all) {
   var raw = account || {}
   var name = trimmed(raw.label)
   if (name) return name
-  var local = trimmed(raw.email).split("@")[0]
+  var email = trimmed(raw.email)
+  var at = email.lastIndexOf("@")
+  var local = at >= 0 ? email.substring(0, at) : email
+  var domain = at >= 0 ? email.substring(at + 1) : ""
+  var others = Array.isArray(all) ? all : []
+  for (var i = 0; i < others.length && domain !== ""; i++) {
+    var other = others[i] || {}
+    var otherEmail = trimmed(other.email)
+    if (otherEmail.toLowerCase() === email.toLowerCase()) continue
+    if (otherEmail.split("@")[0].toLowerCase() === local.toLowerCase()) return domain
+  }
   return local || "New account"
 }
 

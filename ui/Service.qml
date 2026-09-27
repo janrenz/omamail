@@ -1371,7 +1371,7 @@ Item {
         email: accounts[i].email,
         provider: accounts[i].provider,
         calendarProvider: Accounts.calendarProvider(accounts[i]),
-        label: Accounts.label(accounts[i]),
+        label: Accounts.label(accounts[i], accounts),
         // The name that was chosen, if one was. `label` always answers —
         // falling through to the local part — so it cannot say whether
         // anything was named, and the switcher has to know the difference.
@@ -1425,7 +1425,7 @@ Item {
       var host = accountHosts.objectAt(i)
       out.push({
         id: accounts[i].id,
-        label: Accounts.label(accounts[i]),
+        label: Accounts.label(accounts[i], accounts),
         messages: host ? host.messages : [],
         // Whether this mailbox has more to come, which is what decides where
         // the merge has to stop: a source still holding mail below its last
@@ -1447,7 +1447,7 @@ Item {
       if (!accounts[i].id) continue
       var host = accountHosts.objectAt(i)
       out.push({
-        label: Accounts.label(accounts[i]),
+        label: Accounts.label(accounts[i], accounts),
         loading: !!(host && host.listLoading),
         loaded: !!(host && host.listLoaded),
         serverSearchLoading: !!(host && host.serverSearchLoading),
@@ -1583,7 +1583,7 @@ Item {
     for (var i = 0; i < values.length; i++) {
       var host = accountHosts.objectAt(i)
       accounts.push({
-        id: values[i].id, label: Accounts.label(values[i]), inbox: "Inbox",
+        id: values[i].id, label: Accounts.label(values[i], values), inbox: "Inbox",
         messages: host ? host.previewMessages : []
       })
     }
@@ -1621,7 +1621,7 @@ Item {
   // bar shows this; the full address is on the status line.
   readonly property string accountLabel: {
     var entry = Accounts.find(accountList, activeAccountId)
-    return entry ? Accounts.label(entry) : ""
+    return entry ? Accounts.label(entry, accountList ? accountList.accounts : []) : ""
   }
   readonly property var sendAsAliases: current ? current.availableSendAsAliases : []
   // Every address a new message may be sent as, across signed-in mailboxes.
@@ -1636,7 +1636,7 @@ Item {
       mailboxes.push({
         id: accounts[i].id,
         email: host && host.accountEmail ? host.accountEmail : accounts[i].email,
-        label: Accounts.label(accounts[i]),
+        label: Accounts.label(accounts[i], accounts),
         ready: !!(host && host.ready),
         canSend: !!(host && host.canSend),
         aliases: host ? host.availableSendAsAliases : []

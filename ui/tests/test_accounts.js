@@ -866,3 +866,14 @@ assert.strictEqual(frozen(accounts.replaceAt(cidActive, -1, account("x@example.c
   assert.strictEqual(accounts.setSignatureHtml(rich, "me@gmail.com", "").accounts[0].signatureHtml, "")
   assert.strictEqual(accounts.load(accounts.serialize(rich)).accounts[0].signatureHtml, "<p>Ada</p>")
 }
+
+// Two mailboxes with the same local part are told apart by their domains.
+{
+  const both = [{ email: "jan@example.org" }, { email: "jan@example.com" }, { email: "ada@example.net" }]
+  assert.strictEqual(accounts.label(both[0], both), "example.org")
+  assert.strictEqual(accounts.label(both[1], both), "example.com")
+  assert.strictEqual(accounts.label(both[2], both), "ada", "a name nobody else has stays the name")
+  assert.strictEqual(accounts.label({ email: "jan@example.org", label: "Work" }, both), "Work",
+    "a label somebody chose still wins")
+  assert.strictEqual(accounts.label(both[0]), "jan", "without the list, the local part as before")
+}
