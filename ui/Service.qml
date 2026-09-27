@@ -12,6 +12,7 @@ import "agent/Agent.js" as Agent
 import "account/Accounts.js" as Accounts
 import "account/Model.js" as Model
 import "account/Unified.js" as Unified
+import "account/Screener.js" as Screener
 import "providers/Registry.js" as Provider
 import "providers/Credentials.js" as CredentialKeys
 import "providers/Secrets.js" as SecretText
@@ -1006,6 +1007,13 @@ Item {
     saveAccounts()
   }
 
+  function setScreener(id, value) {
+    var next = Accounts.setScreener(accountList, id, value)
+    if (Accounts.serialize(next) === Accounts.serialize(accountList)) return
+    accountList = next
+    saveAccounts()
+  }
+
   function setAccountLabel(id, text) {
     var next = Accounts.setLabel(accountList, id, text)
     if (Accounts.serialize(next) === Accounts.serialize(accountList)) return
@@ -1678,7 +1686,56 @@ Item {
   readonly property int inboxUnread: unified
     ? Number(unifiedSnapshot.totalUnread || 0) : (current ? current.inboxUnread : 0)
   readonly property var messages: unified
-    ? unifiedMessages : (current ? current.messages : [])
+    ? unifiedMessages : (current ? Screener.filter(current.messages, place, current.screener.ledger) : [])
+
+  // ------------------------------------------------------- the Screener
+  //
+  // HEY's places over this mailbox - see account/Screener.js. The inbox
+  // places are the list above, filtered; the folder places are folders or
+  // labels, opened the way a label is.
+  readonly property var screenerHost: current && !unified ? current.screener : null
+  readonly property bool screenerAvailable: !!screenerHost && screenerHost.available
+  readonly property bool screenerOn: !!screenerHost && screenerHost.on
+  readonly property string place: screenerOn ? screenerHost.place : ""
+  readonly property var placeCounts: screenerOn ? screenerHost.placeCounts : ({})
+  readonly property var places: screenerOn ? Screener.PLACES : []
+
+  function enableScreener() { if (screenerHost) screenerHost.enable() }
+  function disableScreener() { if (screenerHost) screenerHost.disable() }
+
+  function selectPlace(key) {
+    var info = Screener.place(String(key))
+    if (!screenerOn || !info) return
+    if (info.inbox) {
+      current.selectMailbox("inbox")
+      screenerHost.place = info.key
+      return
+    }
+    screenerHost.ensureFolders(function() {
+      var id = root.screenerHost.labelIdFor(info.key)
+      if (id === "") return
+      root.current.selectLabel(info.folder, id)
+      root.screenerHost.place = info.key
+    })
+  }
+
+  // One of the Screener's keys, on the row under the cursor. Answers whether
+  // anything happened, so a key with no Screener behind it passes through.
+  function screenerKey(id, messageId) {
+    if (!screenerOn) return false
+    var row = null
+    for (var i = 0; i < messages.length; i++)
+      if (String(messages[i].id) === String(messageId)) { row = messages[i]; break }
+    if (!row) return false
+    var decisions = { screenerImbox: "imbox", screenerFeed: "feed", screenerPapertrail: "papertrail", screenerOut: "out" }
+    if (decisions[id]) screenerHost.decide(row, decisions[id])
+    else if (id === "screenerReplyLater") screenerHost.replyLater(row)
+    else if (id === "screenerSetAside") screenerHost.setAside(row)
+    else if (id === "screenerBubbleTomorrow") screenerHost.bubble(row, "tomorrow")
+    else if (id === "screenerBubbleNextWeek") screenerHost.bubble(row, "nextweek")
+    else return false
+    return true
+  }
   // A label belongs to one service and one mailbox within it, so a merged list
   // has none to draw and #83's picker has nothing to offer: `v` is refused
   // rather than opening an empty list, which is what `canMoveToLabel` says.
@@ -2038,6 +2095,7 @@ Item {
     return current ? current.cursorOffset(cursorId, delta) : ""
   }
   function selectMailbox(key) {
+    if (screenerHost) screenerHost.place = ""
     if (!unified) {
       if (current) current.selectMailbox(key)
       return
@@ -2113,6 +2171,7 @@ Item {
   // is kept: dropping it would have left #83's picker unable to say which
   // label a list is showing.
   function selectLabel(name, labelId) {
+    if (screenerHost) screenerHost.place = ""
     if (current && !unified) current.selectLabel(name, labelId)
   }
   // Asked of the mailbox that owns the row rather than of the visible one: in
@@ -2545,6 +2604,8 @@ Item {
       bodyMode: root.bodyMode
       // The labels this mailbox watches for new mail, off its own entry.
       monitoredIds: entry ? entry.monitored : []
+      screenerState: entry ? entry.screener : null
+      onScreenerSaveRequested: function(value) { root.setScreener(accountId, value) }
       // Every mailbox obeys the one answer: it is about what the reader is
       // willing to tell a sender, not about which account the mail came to.
       alwaysShowImages: root.alwaysShowImages

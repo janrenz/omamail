@@ -910,10 +910,7 @@ Item {
     if (cursorId === "") return false
     var acted = cursorId
     var row = service.messages[Model.indexById(service.messages, acted)]
-    // "Was open" is the conversation's: with the rail up the reader can be
-    // showing a member of the acted row rather than the row itself, and
-    // archiving from a member has to open the next row or go back rather than
-    // leave a message that has just moved on screen.
+    // "Was open" is the conversation's: the reader may show a member of it.
     //
     // And a preview is not open at all. It satisfies "is this the selected
     // one" without having been opened, which made `e` on a previewed row call
@@ -1022,6 +1019,7 @@ Item {
     if (id === "backToList") return backToList()
     if (id === "nextMember") return stepMember(1)
     if (id === "previousMember") return stepMember(-1)
+    if (id.indexOf("screener") === 0) return !!service && service.screenerKey(id, cursorId)
     if (id === "archive") return actOnCursor("archive")
     if (id === "trash") return actOnCursor("trash")
     // Through the same guard actOnCursor applies rather than around it:

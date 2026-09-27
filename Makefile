@@ -3,7 +3,7 @@ QMLLINT := /usr/lib/qt6/bin/qmllint
 QML_FILES := ui/Service.qml ui/BarWidget.qml ui/App.qml ui/compose/RecoveryController.qml \
 	ui/backend/Backend.qml ui/backend/Runtime.qml ui/diagnostics/Diagnostics.qml \
 	ui/components/BackendSetup.qml ui/components/OmamailLogo.qml \
-	ui/account/MailAccount.qml ui/account/BackendSync.qml ui/account/SendQueue.qml ui/account/Intents.qml ui/account/BatchAction.qml ui/account/Rsvp.qml ui/account/LabelActions.qml ui/account/Unsubscribe.qml ui/account/NewMailNotification.qml \
+	ui/account/MailAccount.qml ui/account/BackendSync.qml ui/account/SendQueue.qml ui/account/Intents.qml ui/account/BatchAction.qml ui/account/Rsvp.qml ui/account/LabelActions.qml ui/account/ScreenerHost.qml ui/account/Unsubscribe.qml ui/account/NewMailNotification.qml \
 	ui/cache/CacheStore.qml ui/cache/BodyCache.qml \
 	ui/providers/AuthManager.qml ui/providers/GmailApiClient.qml \
 	ui/providers/OutlookAuth.qml \
@@ -40,7 +40,7 @@ QML_FILES := ui/Service.qml ui/BarWidget.qml ui/App.qml ui/compose/RecoveryContr
 	ui/components/InviteCard.qml \
 	ui/components/SwitcherSearch.qml \
 	ui/components/AccountNameField.qml \
-	ui/components/ReaderBlankSlate.qml \
+	ui/components/ReaderBlankSlate.qml ui/components/AgendaPane.qml \
 	ui/components/ReaderSkeleton.qml \
 	ui/components/ComposeView.qml \
 	ui/components/RecipientSuggestions.qml \
@@ -153,6 +153,7 @@ test-js:
 	node ui/tests/test_conversation.js
 	node tests/test_reader_pipeline.js
 	node ui/tests/test_keymap.js
+	node ui/tests/test_screener.js
 	node ui/tests/test_accounts.js
 	node ui/tests/test_unified.js
 	node ui/tests/test_aliases.js

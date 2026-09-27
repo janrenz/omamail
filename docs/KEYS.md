@@ -135,6 +135,14 @@ used to exist, and they had.
 | `markUnread` | `Shift+U` | mail | Mark unread |
 | `toggleCheck` | `x`, `Space` | mail | Select or deselect the message |
 | `checkAll` | `Ctrl+A` | list | Select every message loaded, or none |
+| `screenerImbox` | `1` | mail | This sender to the Imbox from now on |
+| `screenerFeed` | `2` | mail | This sender to The Feed from now on |
+| `screenerPapertrail` | `3` | mail | This sender to the Paper Trail from now on |
+| `screenerOut` | `0` | mail | Screen this sender out |
+| `screenerReplyLater` | `l` | mail | Reply Later, or take it off the stack |
+| `screenerSetAside` | `t` | mail | Set it aside |
+| `screenerBubbleTomorrow` | `z` | mail | Bubble Up tomorrow morning |
+| `screenerBubbleNextWeek` | `Shift+Z` | mail | Bubble Up next Monday |
 | `reply` | `r` | mail | Reply |
 | `replyAll` | `a` | mail | Reply to all |
 | `forward` | `f` | mail | Forward |

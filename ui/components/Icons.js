@@ -54,6 +54,8 @@ var GLYPHS = {
   video: 0xF0BDC,        // video-outline
   pin: 0xF0931,          // pin-outline
   people: 0xF000F,       // account-multiple-outline
+  feed: 0xF046B,         // rss — the Screener's Feed
+  clock: 0xF0150,        // clock-outline — Bubble Up
   agent: 0xF167A         // robot-outline — the message agent
 }
 

@@ -2430,6 +2430,17 @@ Item {
     account: root
   }
 
+  // The Screener and its places - see ScreenerHost.qml. Its decisions come
+  // off the account entry and go back to it through the service.
+  property var screenerState: null
+  signal screenerSaveRequested(var value)
+  readonly property alias screener: screenerHost
+  ScreenerHost {
+    id: screenerHost
+    account: root
+    onSaveRequested: function(value) { root.screenerSaveRequested(value) }
+  }
+
   // ------------------------------------------------------------ navigation
 
   function selectMailbox(key) {

@@ -38,8 +38,14 @@ Item {
 
   // The labels as a tree: a child indented under its parent, a parent that
   // folds. Model.labelTree decides the shape; this draws it.
+  // The Screener's own folders are drawn as its places above, not twice.
+  readonly property var screenerFolders: root.service && root.service.screenerOn === true
+    ? (root.service.places || []).filter(function(p) { return !!p.folder })
+        .map(function(p) { return p.folder.toLowerCase() }) : []
   readonly property var userLabels: root.service
-    ? Model.labelTree(root.service.labels, root.service.collapsedFolders) : []
+    ? Model.labelTree((root.service.labels || []).filter(function(label) {
+        return root.screenerFolders.indexOf(String(label.name || "").toLowerCase()) < 0
+      }), root.service.collapsedFolders) : []
 
   // The rail's own edge. The list already draws one on its far side, so
   // without this the icons sit on the same surface as the messages.
@@ -73,6 +79,36 @@ Item {
       width: flick.width - Style.space(12)
       spacing: Style.space(1)
 
+      // The Screener's places, above the mailboxes while it is on - see
+      // account/Screener.js. The Screener counts the people writing for the
+      // first time; it also offers the senders from before it was switched
+      // on, so it stays in the rail whether anybody new is waiting or not.
+      Repeater {
+        model: root.service ? root.service.places : []
+
+        Entry {
+          required property var modelData
+          readonly property int waiting: Number((root.service.placeCounts || {})[modelData.key] || 0)
+          label: modelData.label
+          icon: modelData.icon
+          count: modelData.key === "screener" || modelData.key === "replylater" ? waiting : 0
+          selected: !root.calendarSelected && root.service.place === modelData.key
+          onActivated: root.service.selectPlace(modelData.key)
+        }
+      }
+
+      Item {
+        width: parent.width
+        implicitHeight: Style.space(12)
+        visible: !!root.service && root.service.screenerOn
+
+        PanelSeparator {
+          anchors.verticalCenter: parent.verticalCenter
+          width: parent.width
+          foreground: root.textColor
+        }
+      }
+
       Repeater {
         // The account's own list. A provider with no All mail must not be
         // offered one, and an IMAP account's Flagged is not Gmail's Starred.
@@ -89,7 +125,7 @@ Item {
           // the user built and their sizes mean something.
           count: 0
           selected: !root.calendarSelected && !!root.service
-            && root.service.mailboxKey === modelData.key
+            && root.service.mailboxKey === modelData.key && root.service.place === ""
             && root.service.searchQuery === "" && root.service.rawQuery === ""
           slotNumber: Model.slotNumberOf(root.slots, "mailbox", modelData.key)
           onActivated: root.mailboxSelected(modelData.key)
@@ -161,6 +197,17 @@ Item {
     anchors.left: parent.left
     anchors.right: edge.left
     anchors.bottom: parent.bottom
+
+    // Offered where the mailbox can hold the places and they are not on yet.
+    // It creates their folders and starts sorting new senders, so it is a
+    // row a person chooses rather than something that happens.
+    Entry {
+      x: Style.space(6)
+      visible: !!root.service && root.service.screenerAvailable && !root.service.screenerOn
+      label: "Turn on the Screener"
+      icon: "people"
+      onActivated: root.service.enableScreener()
+    }
 
     Entry {
       x: Style.space(6)

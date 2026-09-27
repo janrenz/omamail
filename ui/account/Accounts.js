@@ -224,6 +224,11 @@ function makeAccount(account) {
     // The labels watched for new mail, by id. A fact about the mailbox, so
     // it lives beside its name rather than in the window's file.
     monitored: idList(raw.monitored),
+    // The Screener's decisions for this mailbox - see Screener.js, which is
+    // what reads it. Kept as it was written: normalizing it is that file's
+    // business, and an entry that has never had one stays without.
+    screener: raw.screener && typeof raw.screener === "object"
+      ? JSON.parse(JSON.stringify(raw.screener)) : null,
     // Whether this row is the setup form's working state rather than a
     // mailbox. It used to be inferred from the id being empty, and that read
     // a mailbox whose address had been corrupted as a draft and dropped it at
@@ -541,6 +546,16 @@ function setMonitored(list, id, labelIds) {
   if (at < 0) return next
   var entry = makeAccount(next.accounts[at])
   entry.monitored = idList(labelIds)
+  next.accounts[at] = entry
+  return next
+}
+
+function setScreener(list, id, value) {
+  var next = copyList(list)
+  var at = indexOfId(next.accounts, id)
+  if (at < 0) return next
+  var entry = makeAccount(next.accounts[at])
+  entry.screener = value && typeof value === "object" ? JSON.parse(JSON.stringify(value)) : null
   next.accounts[at] = entry
   return next
 }

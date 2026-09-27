@@ -100,6 +100,27 @@ var BINDINGS = [
   { id: "checkAll", keys: ["Ctrl+A"], contexts: ["list"],
     group: "Acting", label: "Select every message loaded, or none" },
 
+  // The Screener's places - see account/Screener.js. Bare digits for the
+  // four answers, in the order the Screener draws them; they do nothing in a
+  // mailbox where the Screener is off, and Ctrl and Alt digits keep their
+  // own meanings.
+  { id: "screenerImbox", keys: ["1"], contexts: MAIL,
+    group: "Screener", label: "This sender to the Imbox from now on" },
+  { id: "screenerFeed", keys: ["2"], contexts: MAIL,
+    group: "Screener", label: "This sender to The Feed from now on" },
+  { id: "screenerPapertrail", keys: ["3"], contexts: MAIL,
+    group: "Screener", label: "This sender to the Paper Trail from now on" },
+  { id: "screenerOut", keys: ["0"], contexts: MAIL,
+    group: "Screener", label: "Screen this sender out" },
+  { id: "screenerReplyLater", keys: ["l"], contexts: MAIL,
+    group: "Screener", label: "Reply Later, or take it off the stack" },
+  { id: "screenerSetAside", keys: ["t"], contexts: MAIL,
+    group: "Screener", label: "Set it aside" },
+  { id: "screenerBubbleTomorrow", keys: ["z"], contexts: MAIL,
+    group: "Screener", label: "Bubble Up tomorrow morning" },
+  { id: "screenerBubbleNextWeek", keys: ["Shift+Z"], contexts: MAIL,
+    group: "Screener", label: "Bubble Up next Monday" },
+
   // Answering works from the list too, the way the row's own menu does: the
   // message is opened first and the draft waits for it. Binding these to the
   // reader only left the keyboard able to do less than a right-click.

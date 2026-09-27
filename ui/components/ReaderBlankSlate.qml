@@ -52,8 +52,14 @@ Item {
     { key: "c", action: "Compose" }
   ]
 
+  // The inbox and the calendar as one view: with a calendar to show and room
+  // to show it, the pane nobody is reading holds the week ahead instead.
+  readonly property bool showAgenda: agendaPane.hasCalendars
+    && width > Style.space(320) && height > Style.space(300)
+
   Column {
     id: centeredColumn
+    visible: !root.showAgenda
     anchors.centerIn: parent
     width: Math.min(parent.width - Style.space(48), Style.space(340))
     spacing: Style.space(10)
@@ -158,6 +164,18 @@ Item {
     }
   }
 
+  AgendaPane {
+    id: agendaPane
+    anchors.fill: parent
+    visible: root.showAgenda
+    service: root.service
+    textColor: root.textColor
+    accentColor: root.accentColor
+    dimColor: root.dimColor
+    dimmerColor: root.dimmerColor
+    panelFontFamily: root.panelFontFamily
+  }
+
   // Not part of the column above: the legend hides itself on a narrow pane and
   // the version has no reason to move when it does. Quietest thing on screen —
   // it is there to be found, not read.
@@ -169,7 +187,7 @@ Item {
     anchors.horizontalCenter: parent.horizontalCenter
     width: Math.min(parent.width - Style.space(48), Style.space(340))
     horizontalAlignment: Text.AlignHCenter
-    visible: root.showVersion
+    visible: root.showVersion && !root.showAgenda
     text: root.versionText
     color: root.dimmerColor
     font.family: root.panelFontFamily
