@@ -2707,6 +2707,7 @@ Item {
         canOpenWebInbox: !!root.service && root.service.canOpenWebInbox
         accountCount: root.service ? root.service.accountCount : 1
         canQuit: root.standaloneWindowChrome
+        service: root.service
         onMarkAllReadRequested: if (root.service) root.service.markAllRead()
         onOpenWebRequested: if (root.service) root.service.openWebInbox()
         onShortcutsRequested: root.openHelp()

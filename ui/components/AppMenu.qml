@@ -26,6 +26,9 @@ Item {
   // Only the standalone host owns the application process. A plugin menu
   // must never offer to terminate the shell that loaded it.
   property bool canQuit: false
+  // For the Screener's switch, which the sidebar also offers: a narrow window
+  // has no sidebar, and this menu is the one place both sizes share.
+  property var service: null
   readonly property bool opened: menu.opened
 
   // Positioned against the window rather than a button, and flipped when it
@@ -34,7 +37,7 @@ Item {
   property real anchorX: 0
   property real anchorY: 0
   property int cursorIndex: -1
-  readonly property var menuRows: [inboxRow, calendarRow, markRow, webRow,
+  readonly property var menuRows: [inboxRow, calendarRow, markRow, screenerRow, webRow,
     switchRow, settingsRow, shortcutsRow, projectRow, authorRow, quitRow]
 
   function openAt(sceneX, sceneY) {
@@ -161,6 +164,12 @@ Item {
         text: "Mark these read"
         enabled: root.signedIn
         onActivated: { menu.close(); root.markAllReadRequested() }
+      }
+      MenuRow {
+        id: screenerRow
+        text: "Turn on the Screener"
+        visible: !!root.service && root.service.screenerOffered === true
+        onActivated: { menu.close(); root.service.enableScreener() }
       }
       MenuRow {
         id: webRow
