@@ -95,4 +95,22 @@ assert.strictEqual(Object.keys(screener.bubble(bubbled, "<m@x>", "").bubbles).le
   assert.strictEqual(accounts.makeAccount({ email: "me@example.org" }).screener, null)
 }
 
+
+// "All mailboxes": each row by its own mailbox's entry.
+{
+  const merged = [
+    row("a:wait", "new@x.y", "2026-09-11T00:00:00Z", { accountId: "a" }),
+    row("b:new", "new@x.y", "2026-09-11T00:00:00Z", { accountId: "b" }),
+    row("a:seen", "friend@x.y", "2026-09-10T00:00:00Z", { accountId: "a" }),
+    row("b:flag", "friend@x.y", "2026-09-09T00:00:00Z", { accountId: "b", starred: true }),
+    row("a:flag", "friend@x.y", "2026-09-08T00:00:00Z", { accountId: "a", starred: true })
+  ]
+  const ledgers = { a: decided }
+  assert.deepStrictEqual(ids(screener.filterMerged(merged, "imbox", ledgers)), ["b:new", "a:seen", "b:flag"],
+    "a mailbox without the Screener is all Imbox")
+  assert.deepStrictEqual(ids(screener.filterMerged(merged, "screener", ledgers)), ["a:wait"])
+  assert.deepStrictEqual(ids(screener.filterMerged(merged, "replylater", ledgers)), ["a:flag"])
+  assert.deepStrictEqual(ids(screener.filterMerged(merged, "feed", ledgers)), ids(merged), "folder places are not merged")
+}
+
 console.log("test_screener.js ok")

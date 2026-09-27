@@ -164,6 +164,39 @@ function filter(rows, key, raw) {
   return out
 }
 
+// The inbox places of "All mailboxes": each row judged by its own mailbox's
+// entry, `ledgers` keyed by account id. A mailbox without the Screener is all
+// Imbox. The folder places are one mailbox's folders, so they are not here.
+function filterMerged(rows, key, ledgers) {
+  var list = Array.isArray(rows) ? rows : []
+  var info = place(key)
+  if (!info || !info.inbox) return list
+  var groups = {}
+  for (var i = 0; i < list.length; i++) {
+    var owner = String(list[i].accountId || "")
+    ;(groups[owner] = groups[owner] || []).push(list[i])
+  }
+  var kept = {}
+  var screened = []
+  for (var id in groups) {
+    var raw = (ledgers || {})[id]
+    var chosen = normalize(raw).on ? filter(groups[id], key, raw) : (key === "imbox" ? groups[id] : [])
+    for (var c = 0; c < chosen.length; c++) kept[String(chosen[c].id)] = true
+    if (key === "screener") screened = screened.concat(chosen)
+  }
+  // The Screener's own order is new senders before earlier ones; merged, the
+  // new ones of every mailbox still come first.
+  if (key === "screener") {
+    var fresh = screened.filter(function(r) { return placeOf(r, (ledgers || {})[String(r.accountId || "")]) === "screener" })
+    return fresh.concat(screened.filter(function(r) { return fresh.indexOf(r) < 0 }))
+  }
+  return list.filter(function(r) { return kept[String(r.id)] === true })
+}
+
+function inboxPlaces() {
+  return PLACES.filter(function(p) { return !!p.inbox })
+}
+
 function counts(rows, raw) {
   var value = normalize(raw)
   var list = Array.isArray(rows) ? rows : []

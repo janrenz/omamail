@@ -1686,25 +1686,42 @@ Item {
   readonly property int inboxUnread: unified
     ? Number(unifiedSnapshot.totalUnread || 0) : (current ? current.inboxUnread : 0)
   readonly property var messages: unified
-    ? unifiedMessages : (current ? Screener.filter(current.messages, place, current.screener.ledger) : [])
+    ? (place !== "" ? Screener.filterMerged(unifiedMessages, place, screenerLedgers) : unifiedMessages)
+    : (current ? Screener.filter(current.messages, place, current.screener.ledger) : [])
 
   // ------------------------------------------------------- the Screener
   //
   // HEY's places over this mailbox - see account/Screener.js. The inbox
   // places are the list above, filtered; the folder places are folders or
   // labels, opened the way a label is.
+  //
+  // "All mailboxes" has the inbox places of every mailbox that has them on,
+  // each row judged by its own mailbox; the folder places are one mailbox's.
   readonly property var screenerHost: current && !unified ? current.screener : null
+  readonly property var screenerLedgers: {
+    var out = ({})
+    eachHost(function(host) { if (host.screener.on) out[host.accountId] = host.screener.ledger })
+    return out
+  }
   readonly property bool screenerAvailable: !!screenerHost && screenerHost.available
-  readonly property bool screenerOn: !!screenerHost && screenerHost.on
-  readonly property string place: screenerOn ? screenerHost.place : ""
-  readonly property var placeCounts: screenerOn ? screenerHost.placeCounts : ({})
-  readonly property var places: screenerOn ? Screener.PLACES : []
+  readonly property bool screenerOn: unified ? Object.keys(screenerLedgers).length > 0
+    : !!screenerHost && screenerHost.on
+  property string unifiedPlace: ""
+  readonly property string place: !screenerOn ? "" : unified ? unifiedPlace : screenerHost.place
+  readonly property var placeCounts: {
+    if (!screenerOn) return ({})
+    if (!unified) return screenerHost.placeCounts
+    var out = { imbox: 0, screener: 0, replylater: 0 }
+    eachHost(function(host) { for (var k in out) out[k] += Number(host.screener.placeCounts[k] || 0) })
+    return out
+  }
+  readonly property var places: !screenerOn ? [] : unified ? Screener.inboxPlaces() : Screener.PLACES
 
   // The tabs a narrow window shows in place of the rail: the places first
   // while the Screener is on, then the mailboxes. A place's key is
   // "place:<key>", which selectMailbox turns back into selectPlace.
   readonly property var tabRows: screenerOn
-    ? Screener.PLACES.map(function(p) {
+    ? places.map(function(p) {
         return { key: "place:" + p.key, label: p.label, icon: p.icon, optional: !!p.folder }
       }).concat(mailboxes)
     : mailboxes
@@ -1716,6 +1733,12 @@ Item {
   function selectPlace(key) {
     var info = Screener.place(String(key))
     if (!screenerOn || !info) return
+    if (unified) {
+      if (!info.inbox) return
+      selectMailbox("inbox")
+      unifiedPlace = info.key
+      return
+    }
     if (info.inbox) {
       current.selectMailbox("inbox")
       screenerHost.place = info.key
@@ -1732,17 +1755,20 @@ Item {
   // One of the Screener's keys, on the row under the cursor. Answers whether
   // anything happened, so a key with no Screener behind it passes through.
   function screenerKey(id, messageId) {
-    if (!screenerOn) return false
+    var host = unified ? hostForId(messageId) : current
+    var screener = host ? host.screener : null
+    if (!screener || !screener.on) return false
     var row = null
-    for (var i = 0; i < messages.length; i++)
-      if (String(messages[i].id) === String(messageId)) { row = messages[i]; break }
+    var own = sourceIdFor(messageId)
+    for (var i = 0; i < host.messages.length; i++)
+      if (String(host.messages[i].id) === own) { row = host.messages[i]; break }
     if (!row) return false
     var decisions = { screenerImbox: "imbox", screenerFeed: "feed", screenerPapertrail: "papertrail", screenerOut: "out" }
-    if (decisions[id]) screenerHost.decide(row, decisions[id])
-    else if (id === "screenerReplyLater") screenerHost.replyLater(row)
-    else if (id === "screenerSetAside") screenerHost.setAside(row)
-    else if (id === "screenerBubbleTomorrow") screenerHost.bubble(row, "tomorrow")
-    else if (id === "screenerBubbleNextWeek") screenerHost.bubble(row, "nextweek")
+    if (decisions[id]) screener.decide(row, decisions[id])
+    else if (id === "screenerReplyLater") screener.replyLater(row)
+    else if (id === "screenerSetAside") screener.setAside(row)
+    else if (id === "screenerBubbleTomorrow") screener.bubble(row, "tomorrow")
+    else if (id === "screenerBubbleNextWeek") screener.bubble(row, "nextweek")
     else return false
     return true
   }
@@ -2107,6 +2133,7 @@ Item {
   function selectMailbox(key) {
     if (String(key).indexOf("place:") === 0) { selectPlace(String(key).substring(6)); return }
     if (screenerHost) screenerHost.place = ""
+    unifiedPlace = ""
     if (!unified) {
       if (current) current.selectMailbox(key)
       return
